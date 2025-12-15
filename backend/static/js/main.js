@@ -12,6 +12,47 @@ const CONFIG = {
     }
 };
 
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    fetchPolicies();
+});
+
+async function fetchPolicies() {
+    try {
+        const response = await fetch('/api/policies');
+        const data = await response.json();
+        const policies = data.policies;
+
+        // Populate Select
+        const select = document.getElementById('policy');
+        select.innerHTML = '';
+        policies.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p.toUpperCase().replace('_', ' ');
+            select.appendChild(opt);
+        });
+
+        // Populate Checkboxes
+        const checkboxContainer = document.getElementById('policy-checkboxes');
+        checkboxContainer.innerHTML = '';
+        policies.forEach((p, index) => {
+            const label = document.createElement('label');
+            label.style.display = 'block';
+            label.style.cursor = 'pointer';
+
+            // Format index with leading zero
+            const idxStr = (index + 1).toString().padStart(2, '0');
+
+            label.innerHTML = `<input type="checkbox" value="${p}" checked> [${idxStr}] ${p.toUpperCase().replace('_', ' ')}`;
+            checkboxContainer.appendChild(label);
+        });
+
+    } catch (err) {
+        console.error("Failed to fetch policies:", err);
+    }
+}
+
 let simulationData = null;
 let currentFrame = 0;
 let isPlaying = false;
@@ -250,7 +291,7 @@ function summarizeRunsForCharts(runs) {
     runs.forEach(run => {
         const p = run.policy || 'unknown';
         if (!policies[p]) {
-            policies[p] = { successCount: 0, steps: [], coverages: [], runs: [] };
+            policies[p] = { successCount: 0, steps: [], coverages: [], efficiencies: [], turns: [], collisions: [], runs: [] };
         }
         policies[p].runs.push(run);
         if (run.success) {
@@ -260,6 +301,9 @@ function summarizeRunsForCharts(runs) {
         if (run.coverage !== undefined) {
             policies[p].coverages.push(run.coverage);
         }
+        if (run.efficiency !== undefined) policies[p].efficiencies.push(run.efficiency);
+        if (run.turns !== undefined) policies[p].turns.push(run.turns);
+        if (run.collisions !== undefined) policies[p].collisions.push(run.collisions);
     });
 
     // Valid policies only
@@ -270,11 +314,17 @@ function summarizeRunsForCharts(runs) {
 
         // Coverage is avg of all runs usually
         const avgCov = stats.coverages.length ? (stats.coverages.reduce((a, b) => a + b, 0) / stats.coverages.length) : 0;
+        const avgEff = stats.efficiencies && stats.efficiencies.length ? (stats.efficiencies.reduce((a, b) => a + b, 0) / stats.efficiencies.length) : 0;
+        const avgTurns = stats.turns && stats.turns.length ? (stats.turns.reduce((a, b) => a + b, 0) / stats.turns.length) : 0;
+        const avgColl = stats.collisions && stats.collisions.length ? (stats.collisions.reduce((a, b) => a + b, 0) / stats.collisions.length) : 0;
 
         return {
             policy: p,
             success_rate: (stats.successCount / total) * 100,
             avg_steps: parseFloat(avgSteps.toFixed(2)),
+            avg_efficiency: parseFloat(avgEff.toFixed(3)),
+            avg_turns: parseFloat(avgTurns.toFixed(2)),
+            avg_collisions: parseFloat(avgColl.toFixed(2)),
 
             // Re-construct runs array structure expected by renderCharts logic
             // renderCharts logic calculates avg coverage from (run.coverage || 0)
@@ -345,11 +395,24 @@ async function runComparison() {
 let successChart = null;
 let stepsChart = null;
 let coverageChart = null;
+let efficiencyChart = null;
+let turnsChart = null;
+let collisionsChart = null;
 
 function renderCharts(summary) {
     // Reveal the main Telemetry Deck in main content, not sidebar
     const deck = document.getElementById('telemetry-deck');
     deck.style.display = 'block';
+
+    // Ensure the charts container itself is visible
+    document.getElementById('charts-container').style.display = 'block';
+
+    // Auto-expand the deck if it's minimized, to show the new data
+    if (!deck.classList.contains('expanded')) {
+        deck.classList.add('expanded');
+        const icon = document.getElementById('deck-toggle-icon');
+        if (icon) icon.textContent = "▼ MINIMIZE";
+    }
 
     const labels = summary.map(s => s.policy);
     const successData = summary.map(s => s.success_rate);
@@ -362,6 +425,10 @@ function renderCharts(summary) {
         const total = runs.reduce((acc, r) => acc + (r.coverage || 0), 0);
         return (total / runs.length).toFixed(1);
     });
+
+    const efficiencyData = summary.map(s => s.avg_efficiency);
+    const turnsData = summary.map(s => s.avg_turns);
+    const collisionsData = summary.map(s => s.avg_collisions);
 
     const commonOptions = {
         responsive: true,
@@ -433,11 +500,63 @@ function renderCharts(summary) {
         },
         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
     });
+
+
+    // 4. Efficiency Chart
+    if (efficiencyChart) efficiencyChart.destroy();
+    efficiencyChart = new Chart(document.getElementById('efficiencyChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Search Efficiency (0-1)',
+                data: efficiencyData,
+                backgroundColor: 'rgba(255, 193, 7, 0.2)', // Amber
+                borderColor: '#ffc107',
+                borderWidth: 1
+            }]
+        },
+        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 1.0 } } }
+    });
+
+    // 5. Turns Chart
+    if (turnsChart) turnsChart.destroy();
+    turnsChart = new Chart(document.getElementById('turnsChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Turns',
+                data: turnsData,
+                backgroundColor: 'rgba(156, 39, 176, 0.2)', // Purple
+                borderColor: '#9c27b0',
+                borderWidth: 1
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 6. Collisions Chart
+    if (collisionsChart) collisionsChart.destroy();
+    collisionsChart = new Chart(document.getElementById('collisionsChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Collisions',
+                data: collisionsData,
+                backgroundColor: 'rgba(244, 67, 54, 0.2)', // Red
+                borderColor: '#f44336',
+                borderWidth: 1
+            }]
+        },
+        options: commonOptions
+    });
 }
 
 function renderComparisonTable(summary) {
     let html = '<table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">';
-    html += '<tr style="border-bottom: 1px solid #444; color: #a0a0a0;"><th style="text-align:left; padding:5px;">Policy</th><th style="padding:5px;">Success %</th><th style="padding:5px;">Avg Steps</th></tr>';
+    html += '<tr style="border-bottom: 1px solid #444; color: #a0a0a0;"><th style="text-align:left; padding:5px;">Policy</th><th style="padding:5px;">Success %</th><th style="padding:5px;">Avg Steps</th><th style="padding:5px;">Eff</th><th style="padding:5px;">Turns</th><th style="padding:5px;">Coll</th></tr>';
 
     summary.forEach(item => {
         html += `
@@ -445,6 +564,9 @@ function renderComparisonTable(summary) {
                 <td style="padding:8px; font-weight:bold; color: #bb86fc;">${item.policy}</td>
                 <td style="padding:8px; text-align:center;">${item.success_rate.toFixed(1)}%</td>
                 <td style="padding:8px; text-align:center;">${item.avg_steps}</td>
+                <td style="padding:8px; text-align:center;">${item.avg_efficiency}</td>
+                <td style="padding:8px; text-align:center;">${item.avg_turns}</td>
+                <td style="padding:8px; text-align:center;">${item.avg_collisions}</td>
             </tr>
         `;
     });

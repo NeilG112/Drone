@@ -35,19 +35,12 @@
             <label for="policy">>> PROTOCOL (POLICY)</label>
             <!-- Single Mode Select -->
             <select id="policy">
-                <option value="random">Random Walk v1</option>
-                <option value="wall_follow">Wall Follower</option>
-                <option value="frontier">Frontier Explorer</option>
+                <!-- Populated dynamically -->
             </select>
 
             <!-- Compare Mode Checkboxes -->
             <div id="policy-checkboxes" style="display: none; margin-top: 5px;">
-                <label style="display: block; cursor: pointer;"><input type="checkbox" value="random" checked> [01]
-                    Random</label>
-                <label style="display: block; cursor: pointer;"><input type="checkbox" value="wall_follow" checked> [02]
-                    Wall Follow</label>
-                <label style="display: block; cursor: pointer;"><input type="checkbox" value="frontier" checked> [03]
-                    Frontier</label>
+                <!-- Populated dynamically -->
             </div>
         </div>
 
@@ -120,8 +113,8 @@
             </div>
 
             <!-- Charts Container (Hidden by default, shown for Compare/History) -->
-            <div id="charts-container" style="display: none; width: 100%; height: 200px; margin-top: 10px;">
-                <div style="display: flex; gap: 20px; height: 100%;">
+            <div id="charts-container" style="display: none; width: 100%; margin-top: 10px;">
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
                     <div class="chart-box">
                         <canvas id="successChart"></canvas>
                     </div>
@@ -130,6 +123,15 @@
                     </div>
                     <div class="chart-box">
                         <canvas id="coverageChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="efficiencyChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="turnsChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="collisionsChart"></canvas>
                     </div>
                 </div>
             </div>

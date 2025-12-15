@@ -17,6 +17,11 @@ class Simulation:
         steps = 0
         success = False
         
+        # New Metrics
+        collisions = 0
+        turns = 0
+        last_dx, last_dy = 0, 0
+        
         while steps < self.max_steps:
             # Check completion (found all targets)
             if len(self.agent.found_targets) == len(self.world.targets):
@@ -26,11 +31,16 @@ class Simulation:
             # Decision
             dx, dy = self.policy.select_action(self.agent)
             
+            # Track Turns
+            if (dx != last_dx or dy != last_dy) and steps > 0:
+                turns += 1
+            last_dx, last_dy = dx, dy
+            
             # Act
             moved = self.agent.move(dx, dy, self.world)
             if not moved and (dx != 0 or dy != 0):
-                # Bumped into wall or boundary, stay put but maybe update internal state if policy needs it
-                pass
+                # Bumped into wall or boundary
+                collisions += 1
                 
             # Sense
             self.agent.sense(self.world)
@@ -61,6 +71,9 @@ class Simulation:
         
         # Unique cells visited (path length redundancy check)
         unique_visited = len(set([(s['x'], s['y']) for s in history]))
+        
+        # Search Efficiency: Unique Visited / Total Steps (Higher is better, max 1.0)
+        efficiency = (unique_visited / steps) if steps > 0 else 0
             
         return {
             'stats': {
@@ -71,6 +84,9 @@ class Simulation:
                 'coverage_percent': round(coverage_percent, 2),
                 'obstacle_density': round(obstacle_density, 2),
                 'unique_visited': unique_visited,
+                'efficiency': round(efficiency, 3),
+                'turns': turns,
+                'collisions': collisions,
                 'map_width': self.world.width,
                 'map_height': self.world.height
             },
@@ -82,3 +98,4 @@ class Simulation:
                 'seed': self.world.seed
             }
         }
+

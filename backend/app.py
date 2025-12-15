@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request
 from simulation.engine import Simulation
 from simulation.world import GridMap
-from simulation.policies import get_policy
+from simulation.policies import get_policy, POLICIES
 import random
 import uuid
 import os
@@ -23,6 +23,10 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # Global Jobs Store
 # { 'job_id': { 'status': 'running'|'completed'|'error', 'progress': 0, 'total': 100, 'result': None } }
 JOBS = {}
+
+@app.route('/api/policies', methods=['GET'])
+def get_policies():
+    return jsonify({'policies': list(POLICIES.keys())})
 
 @app.route('/')
 def home():
@@ -111,7 +115,10 @@ def _run_benchmark_background(job_id, width, height, policy_name, num_runs):
                 'coverage': stats.get('coverage_percent', 0),
                 'density': stats.get('obstacle_density', 0),
                 'unique_visited': stats.get('unique_visited', 0),
-                'targets_found': stats['targets_found']
+                'targets_found': stats['targets_found'],
+                'efficiency': stats.get('efficiency', 0),
+                'turns': stats.get('turns', 0),
+                'collisions': stats.get('collisions', 0)
             })
             
             # Update Progress
@@ -151,7 +158,7 @@ def start_compare():
     requested_policies = data.get('policies', [])
     
     # Validation/Default
-    available_policies = ['random', 'wall_follow', 'frontier']
+    available_policies = list(POLICIES.keys())
     if not requested_policies:
         policies = available_policies
     else:
@@ -199,7 +206,10 @@ def _run_compare_background(job_id, width, height, num_runs, policies):
                     'coverage': stats.get('coverage_percent', 0),
                     'density': stats.get('obstacle_density', 0),
                     'unique_visited': stats.get('unique_visited', 0),
-                    'targets_found': stats['targets_found']
+                    'targets_found': stats['targets_found'],
+                    'efficiency': stats.get('efficiency', 0),
+                    'turns': stats.get('turns', 0),
+                    'collisions': stats.get('collisions', 0)
                 }
                 
                 # Aggregate stats
@@ -230,10 +240,24 @@ def _run_compare_background(job_id, width, height, num_runs, policies):
             step_counts = [r['steps'] for r in runs if r['success']] 
             avg_steps = sum(step_counts) / len(step_counts) if step_counts else 0
             
+            # New Averages
+            turns_counts = [r['turns'] for r in runs]
+            avg_turns = sum(turns_counts) / num_runs
+            
+            coll_counts = [r['collisions'] for r in runs]
+            avg_coll = sum(coll_counts) / num_runs
+            
+            eff_counts = [r['efficiency'] for r in runs]
+            avg_eff = sum(eff_counts) / num_runs
+            
             summary.append({
                 'policy': p,
                 'success_rate': (success_count / num_runs) * 100,
+                'success_rate': (success_count / num_runs) * 100,
                 'avg_steps': round(avg_steps, 2),
+                'avg_turns': round(avg_turns, 2),
+                'avg_collisions': round(avg_coll, 2),
+                'avg_efficiency': round(avg_eff, 3),
                 'runs': runs
             })
             
@@ -293,7 +317,7 @@ def get_folder_runs(folder_name):
         
         files = glob.glob(os.path.join(folder_path, "*.json"))
         for fpath in files:
-            if os.path.basename(fpath) == 'config.json':
+            if os.path.basename(fpath) == 'config.json' or os.path.basename(fpath) == 'summary.csv':
                 continue
                 
             try:
@@ -307,7 +331,10 @@ def get_folder_runs(folder_name):
                         'steps': stats['steps'],
                         'seed': data['config']['seed'],
                         'policy': data['config']['policy'],
-                        'coverage': stats.get('coverage_percent', 0)
+                        'coverage': stats.get('coverage_percent', 0),
+                        'efficiency': stats.get('efficiency', 0),
+                        'turns': stats.get('turns', 0),
+                        'collisions': stats.get('collisions', 0)
                     })
             except Exception as e:
                 print(f"Error reading {fpath}: {e}")
@@ -343,8 +370,8 @@ def _write_csv_summary(folder_name, runs):
     # Get headers from first run + reorder for readability
     # Expected fields: id, policy, seed, success, steps, coverage, density, unique_visited, targets_found
     # Get headers from first run + reorder for readability
-    # Keys in run_summary: 'id', 'seed', 'policy', 'success', 'steps', 'coverage', 'density', 'unique_visited', 'targets_found'
-    headers = ['id', 'policy', 'seed', 'success', 'steps', 'coverage', 'density', 'unique_visited', 'targets_found']
+    # Keys in run_summary: 'id', 'seed', 'policy', 'success', 'steps', 'coverage', 'density', 'unique_visited', 'targets_found', 'efficiency', 'turns', 'collisions'
+    headers = ['id', 'policy', 'seed', 'success', 'steps', 'coverage', 'density', 'unique_visited', 'targets_found', 'efficiency', 'turns', 'collisions']
     
     try:
         with open(csv_path, 'w', newline='') as f:
