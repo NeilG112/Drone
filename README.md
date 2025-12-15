@@ -70,7 +70,7 @@ DroneNavigation/
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/NeilG112/Drone.git
 cd DroneNavigation
 ```
 
@@ -241,10 +241,4 @@ To contribute to this project:
 2. Test it thoroughly with various map configurations
 3. Document the algorithm and expected performance characteristics
 
-## License
 
-[Add your license here]
-
-## Contact
-
-[Add your contact information here]
