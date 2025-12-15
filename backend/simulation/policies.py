@@ -22,7 +22,7 @@ class RandomWalk(NavigationPolicy):
                     valid_moves.append((dx, dy))
         
         if not valid_moves:
-             return random.choice(moves) # Desperate move
+             return (0, 0) # Stay put when no safe candidate
              
         return random.choice(valid_moves)
 
@@ -72,8 +72,8 @@ class FrontierExploration(NavigationPolicy):
                         new_path.append((dx, dy))
                         queue.append(((nx, ny), new_path))
         
-        # If no frontier found (map fully explored?), random walk
-        return random.choice(moves)
+        # If no frontier found (map fully explored?), safe fallback
+        return (0, 0)
 
 
 class WallFollow(NavigationPolicy):
