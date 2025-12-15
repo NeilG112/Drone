@@ -39,6 +39,10 @@ def run_simulation():
     width = data.get('width', 20)
     height = data.get('height', 20)
     policy_name = data.get('policy', 'random')
+    map_type = data.get('map_type', 'random')
+    complexity = float(data.get('complexity', 0.2))
+    room_size = int(data.get('room_size', 5))
+    num_rooms = int(data.get('map_num_rooms', 5))
     seed = data.get('seed', None)
     
     if seed is None:
@@ -46,7 +50,9 @@ def run_simulation():
     
     # Run single simulation
     sim_id = str(uuid.uuid4())
-    result = _run_single_sim(width, height, policy_name, seed)
+    # Run single simulation
+    sim_id = str(uuid.uuid4())
+    result = _run_single_sim(width, height, policy_name, seed, map_type, complexity, room_size, num_rooms)
     
     # Save to timestamped folder: YYYYMMDD_HHMMSS_single_policy
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -58,7 +64,10 @@ def run_simulation():
         'type': 'single',
         'width': width,
         'height': height,
+        'height': height,
         'policy': policy_name,
+        'map_type': map_type,
+        'complexity': complexity,
         'timestamp': timestamp
     })
     
@@ -77,16 +86,20 @@ def start_benchmark():
     height = int(data.get('height', 20))
     policy_name = data.get('policy', 'random')
     num_runs = int(data.get('num_runs', 5))
+    map_type = data.get('map_type', 'random')
+    complexity = float(data.get('complexity', 0.2))
+    room_size = int(data.get('room_size', 5))
+    num_rooms = int(data.get('map_num_rooms', 5))
     
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {'status': 'running', 'progress': 0, 'total': num_runs, 'result': None}
     
-    thread = threading.Thread(target=_run_benchmark_background, args=(job_id, width, height, policy_name, num_runs))
+    thread = threading.Thread(target=_run_benchmark_background, args=(job_id, width, height, policy_name, num_runs, map_type, complexity, room_size, num_rooms))
     thread.start()
     
     return jsonify({'job_id': job_id})
 
-def _run_benchmark_background(job_id, width, height, policy_name, num_runs):
+def _run_benchmark_background(job_id, width, height, policy_name, num_runs, map_type, complexity, room_size, num_rooms):
     try:
         # Create a batch folder name: YYYYMMDD_HHMMSS_benchmark_policy
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,7 +112,7 @@ def _run_benchmark_background(job_id, width, height, policy_name, num_runs):
             sim_id = str(uuid.uuid4())
             
             # Run simulation
-            result = _run_single_sim(width, height, policy_name, seed)
+            result = _run_single_sim(width, height, policy_name, seed, map_type, complexity, room_size, num_rooms)
             
             # Save to batch folder
             _save_run(sim_id, result, batch_name)
@@ -133,7 +146,12 @@ def _run_benchmark_background(job_id, width, height, policy_name, num_runs):
             'width': width,
             'height': height,
             'num_runs': num_runs,
+            'num_runs': num_runs,
             'policy': policy_name,
+            'map_type': map_type,
+            'complexity': complexity,
+            'room_size': room_size,
+            'num_rooms': num_rooms,
             'timestamp': timestamp
         })
         
@@ -155,6 +173,10 @@ def start_compare():
     width = int(data.get('width', 20))
     height = int(data.get('height', 20))
     num_runs = int(data.get('num_runs', 5))
+    map_type = data.get('map_type', 'random')
+    complexity = float(data.get('complexity', 0.2))
+    room_size = int(data.get('room_size', 5))
+    num_rooms = int(data.get('map_num_rooms', 5))
     requested_policies = data.get('policies', [])
     
     # Validation/Default
@@ -170,12 +192,12 @@ def start_compare():
     total_steps = num_runs * len(policies)
     JOBS[job_id] = {'status': 'running', 'progress': 0, 'total': total_steps, 'result': None}
     
-    thread = threading.Thread(target=_run_compare_background, args=(job_id, width, height, num_runs, policies))
+    thread = threading.Thread(target=_run_compare_background, args=(job_id, width, height, num_runs, policies, map_type, complexity, room_size, num_rooms))
     thread.start()
     
     return jsonify({'job_id': job_id})
 
-def _run_compare_background(job_id, width, height, num_runs, policies):
+def _run_compare_background(job_id, width, height, num_runs, policies, map_type, complexity, room_size, num_rooms):
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         batch_name = f"{timestamp}_compare_custom"
@@ -191,7 +213,7 @@ def _run_compare_background(job_id, width, height, num_runs, policies):
         for seed in seeds:
             for policy_name in policies:
                 sim_id = str(uuid.uuid4())
-                result = _run_single_sim(width, height, policy_name, seed)
+                result = _run_single_sim(width, height, policy_name, seed, map_type, complexity, room_size, num_rooms)
                 
                 # Save run
                 _save_run(sim_id, result, batch_name)
@@ -228,7 +250,10 @@ def _run_compare_background(job_id, width, height, num_runs, policies):
             'width': width,
             'height': height,
             'num_runs': num_runs,
+            'num_runs': num_runs,
             'policies': policies,
+            'map_type': map_type,
+            'complexity': complexity,
             'timestamp': timestamp
         })
                 
@@ -415,9 +440,9 @@ def _save_run(sim_id, result, folder_name):
     with open(file_path, 'w') as f:
         json.dump(result, f)
 
-def _run_single_sim(width, height, policy_name, seed):
+def _run_single_sim(width, height, policy_name, seed, map_type='random', complexity=0.2, room_size=5, num_rooms=5):
     # Initialize simulation components
-    world = GridMap(width, height, seed=seed)
+    world = GridMap(width, height, map_type=map_type, complexity=complexity, room_size=room_size, num_rooms=num_rooms, seed=seed)
     policy = get_policy(policy_name)
     
     # Run simulation
@@ -429,7 +454,11 @@ def _run_single_sim(width, height, policy_name, seed):
             'width': width,
             'height': height,
             'seed': seed,
-            'policy': policy_name
+            'policy': policy_name,
+            'map_type': map_type,
+            'complexity': complexity,
+            'room_size': room_size,
+            'num_rooms': num_rooms
         },
         'stats': result['stats'],
         'history': result['history'],

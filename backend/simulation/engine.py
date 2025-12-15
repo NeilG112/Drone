@@ -5,7 +5,7 @@ class Simulation:
         self.max_steps = max_steps
         # Create agent at (0,0)
         from simulation.agent import Agent
-        self.agent = Agent(0, 0, world.width, world.height)
+        self.agent = Agent(world.start_pos[0], world.start_pos[1], world.width, world.height)
         
     def run(self):
         history = []

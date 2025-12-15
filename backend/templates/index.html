@@ -32,6 +32,35 @@
         </div>
 
         <div class="control-group">
+            <label>>> ENVIRONMENT_TYPE</label>
+            <select id="map-type">
+                <option value="random">RANDOM NOISE</option>
+                <option value="floorplan">FLOOR PLAN</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>>> COMPLEXITY (DENSITY/CLUTTER)</label>
+            <input type="range" id="complexity" min="0" max="100" value="20">
+            <div id="complexity-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">20%</div>
+        </div>
+
+        <div class="control-group">
+            <label>>> ROOM SIZE (Side Length)</label>
+            <input type="range" id="room-size" min="3" max="20" value="5">
+            <div id="room-size-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">5</div>
+        </div>
+
+        <div class="control-group">
+            <label>>> NUMBER OF ROOMS</label>
+            <input type="range" id="num-rooms" min="1" max="30" value="5">
+            <div id="num-rooms-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">5</div>
+        </div>
+
+        <div class="control-group">
             <label for="policy">>> PROTOCOL (POLICY)</label>
             <!-- Single Mode Select -->
             <select id="policy">

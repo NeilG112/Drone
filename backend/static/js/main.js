@@ -101,6 +101,21 @@ timeline.addEventListener('input', (e) => {
     renderFrame();
 });
 
+// Room Size Slider Listener
+document.getElementById('room-size').addEventListener('input', (e) => {
+    document.getElementById('room-size-val').textContent = e.target.value;
+});
+
+// Number of Rooms Slider Listener
+document.getElementById('num-rooms').addEventListener('input', (e) => {
+    document.getElementById('num-rooms-val').textContent = e.target.value;
+});
+
+// Complexity Slider Listener
+document.getElementById('complexity').addEventListener('input', (e) => {
+    document.getElementById('complexity-val').textContent = e.target.value + '%';
+});
+
 // Filter listener
 filterInput.addEventListener('input', (e) => {
     const term = e.target.value.toLowerCase();
@@ -246,9 +261,9 @@ async function loadFolderRuns(folderName) {
         if (data.config) {
             const c = data.config;
             if (c.type === 'benchmark') {
-                metaHtml = `<div style="font-size: 0.7rem; color: #888; margin-top: 5px;">MAP: ${c.width}x${c.height} | RUNS: ${c.num_runs} | POLICY: ${c.policy}</div>`;
+                metaHtml = `<div style="font-size: 0.7rem; color: #888; margin-top: 5px;">MAP: ${c.width}x${c.height} (${c.map_type}) | RUNS: ${c.num_runs} | PL: ${c.policy}</div>`;
             } else if (c.type === 'compare') {
-                metaHtml = `<div style="font-size: 0.7rem; color: #888; margin-top: 5px;">MAP: ${c.width}x${c.height} | RUNS: ${c.num_runs} | POLICIES: ${c.policies.length}</div>`;
+                metaHtml = `<div style="font-size: 0.7rem; color: #888; margin-top: 5px;">MAP: ${c.width}x${c.height} (${c.map_type}) | RUNS: ${c.num_runs} | PL: ${c.policies.length}</div>`;
             }
         }
 
@@ -346,6 +361,12 @@ async function runComparison() {
     const height = parseInt(document.getElementById('height').value);
     const numRuns = parseInt(document.getElementById('num-runs').value);
 
+    // New Params
+    const mapType = document.getElementById('map-type').value;
+    const complexity = parseInt(document.getElementById('complexity').value) / 100.0;
+    const roomSize = parseInt(document.getElementById('room-size').value);
+    const numRooms = parseInt(document.getElementById('num-rooms').value);
+
     // Gather selected policies
     const checkboxes = document.querySelectorAll('#policy-checkboxes input:checked');
     const selectedPolicies = Array.from(checkboxes).map(cb => cb.value);
@@ -368,7 +389,11 @@ async function runComparison() {
                 width,
                 height,
                 num_runs: numRuns,
-                policies: selectedPolicies
+                policies: selectedPolicies,
+                map_type: mapType,
+                complexity,
+                room_size: roomSize,
+                map_num_rooms: numRooms
             })
         });
 
@@ -589,10 +614,50 @@ function renderComparisonTable(summary) {
     compareContainer.innerHTML = html;
 }
 
+// Constraint Logic
+function updateRoomConstraints() {
+    const w = parseInt(document.getElementById('width').value) || 20;
+    const h = parseInt(document.getElementById('height').value) || 20;
+    const roomSize = parseInt(document.getElementById('room-size').value) || 5;
+
+    // Estimate max rooms
+    const totalArea = w * h;
+    // Room takes (size+2)^2 area including walls approx
+    const roomArea = Math.pow(roomSize + 2, 2);
+
+    // Packing efficiency 0.6
+    const maxRooms = Math.floor((totalArea * 0.6) / roomArea);
+    // Hard cap 100
+    const safeMax = Math.min(100, Math.max(1, maxRooms));
+
+    const numRoomsSlider = document.getElementById('num-rooms');
+    const currentVal = parseInt(numRoomsSlider.value);
+
+    // Update Slider Attributes
+    numRoomsSlider.max = safeMax;
+
+    // Clamp value
+    if (currentVal > safeMax) {
+        numRoomsSlider.value = safeMax;
+        document.getElementById('num-rooms-val').textContent = safeMax;
+    }
+}
+
+// Add listeners for constraints
+['width', 'height', 'room-size'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateRoomConstraints);
+});
+// Call initially
+updateRoomConstraints();
+
 async function runSingleSimulation() {
     const width = parseInt(document.getElementById('width').value);
     const height = parseInt(document.getElementById('height').value);
     const policy = document.getElementById('policy').value;
+    const mapType = document.getElementById('map-type').value;
+    const complexity = parseInt(document.getElementById('complexity').value) / 100.0;
+    const roomSize = parseInt(document.getElementById('room-size').value);
+    const numRooms = parseInt(document.getElementById('num-rooms').value);
 
     statusVal.textContent = "Running...";
     runBtn.disabled = true;
@@ -601,7 +666,7 @@ async function runSingleSimulation() {
         const response = await fetch('/api/simulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ width, height, policy })
+            body: JSON.stringify({ width, height, policy, map_type: mapType, complexity, room_size: roomSize, map_num_rooms: numRooms })
         });
 
         const data = await response.json();
@@ -621,6 +686,10 @@ async function runBenchmark() {
     const height = parseInt(document.getElementById('height').value);
     const policy = document.getElementById('policy').value;
     const numRuns = parseInt(document.getElementById('num-runs').value);
+    const mapType = document.getElementById('map-type').value;
+    const complexity = parseInt(document.getElementById('complexity').value) / 100.0;
+    const roomSize = parseInt(document.getElementById('room-size').value);
+    const numRooms = parseInt(document.getElementById('num-rooms').value);
 
     statusVal.textContent = "Benchmarking...";
     runBtn.disabled = true;
@@ -631,7 +700,7 @@ async function runBenchmark() {
         const response = await fetch('/api/benchmark', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ width, height, policy, num_runs: numRuns })
+            body: JSON.stringify({ width, height, policy, num_runs: numRuns, map_type: mapType, complexity, room_size: roomSize, map_num_rooms: numRooms })
         });
 
         const data = await response.json();
