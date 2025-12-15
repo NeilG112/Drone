@@ -1,3 +1,5 @@
+import numpy as np
+
 class Simulation:
     def __init__(self, world, policy, max_steps=500):
         self.world = world
@@ -10,9 +12,26 @@ class Simulation:
     def run(self):
         history = []
         
+        # Initial belief state for diffing
+        prev_belief = np.full((self.world.height, self.world.width), -1, dtype=int)
+        
         # Initial sense
         self.agent.sense(self.world)
-        history.append(self.agent.get_state())
+        
+        # Record Initial State (Compressed)
+        curr_belief = self.agent.belief_map
+        rows, cols = np.where(curr_belief != prev_belief)
+        diff = [[int(r), int(c), int(curr_belief[r, c])] for r, c in zip(rows, cols)]
+        prev_belief = curr_belief.copy()
+        
+        state = {
+            'x': int(self.agent.x),
+            'y': int(self.agent.y),
+            'belief_diff': diff,
+            'found_targets': [(int(x), int(y)) for x, y in self.agent.found_targets],
+            'step': 0
+        }
+        history.append(state)
         
         steps = 0
         success = False
@@ -45,9 +64,19 @@ class Simulation:
             # Sense
             self.agent.sense(self.world)
             
-            # Record
-            state = self.agent.get_state()
-            state['step'] = steps + 1
+            # Record (Compressed)
+            curr_belief = self.agent.belief_map
+            rows, cols = np.where(curr_belief != prev_belief)
+            diff = [[int(r), int(c), int(curr_belief[r, c])] for r, c in zip(rows, cols)]
+            prev_belief = curr_belief.copy()
+            
+            state = {
+                'x': int(self.agent.x),
+                'y': int(self.agent.y),
+                'belief_diff': diff,
+                'found_targets': [(int(x), int(y)) for x, y in self.agent.found_targets],
+                'step': steps + 1
+            }
             history.append(state)
             
             steps += 1
@@ -55,17 +84,12 @@ class Simulation:
         # extensive metrics calculation
         total_cells = self.world.width * self.world.height
         
-        # Coverage: cells in belief map that are NOT -1 (unknown)
+        # Coverage: cells in belief map that are NOT -1 (unknown) - OPTIMIZED
         belief = self.agent.belief_map
-        known_cells = 0
-        for r in range(self.world.height):
-            for c in range(self.world.width):
-                if belief[r][c] != -1:
-                    known_cells += 1
+        known_cells = np.count_nonzero(belief != -1)
         coverage_percent = (known_cells / total_cells) * 100
         
         # Obstacle Density (Ground Truth)
-        import numpy as np
         obstacles = np.count_nonzero(self.world.grid == 1)
         obstacle_density = (obstacles / total_cells) * 100
         

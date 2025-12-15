@@ -34,50 +34,56 @@ def home():
 
 @app.route('/api/simulate', methods=['POST'])
 def run_simulation():
-    data = request.json
-    
-    width = data.get('width', 20)
-    height = data.get('height', 20)
-    policy_name = data.get('policy', 'random')
-    map_type = data.get('map_type', 'random')
-    complexity = float(data.get('complexity', 0.2))
-    room_size = int(data.get('room_size', 5))
-    num_rooms = int(data.get('map_num_rooms', 5))
-    seed = data.get('seed', None)
-    
-    if seed is None:
-        seed = random.randint(0, 100000)
-    
-    # Run single simulation
-    sim_id = str(uuid.uuid4())
-    # Run single simulation
-    sim_id = str(uuid.uuid4())
-    result = _run_single_sim(width, height, policy_name, seed, map_type, complexity, room_size, num_rooms)
-    
-    # Save to timestamped folder: YYYYMMDD_HHMMSS_single_policy
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    folder_name = f"{timestamp}_single_{policy_name}"
-    _save_run(sim_id, result, folder_name)
-    
-    # Save Config for consistency (even single runs)
-    _save_batch_config(folder_name, {
-        'type': 'single',
-        'width': width,
-        'height': height,
-        'height': height,
-        'policy': policy_name,
-        'map_type': map_type,
-        'complexity': complexity,
-        'timestamp': timestamp
-    })
-    
-    return jsonify({
-        'id': sim_id,
-        'config': result['config'],
-        'stats': result['stats'],
-        'history': result['history'],
-        'map': result['map']
-    })
+    try:
+        data = request.json
+        
+        width = data.get('width', 20)
+        height = data.get('height', 20)
+        policy_name = data.get('policy', 'random')
+        map_type = data.get('map_type', 'random')
+        complexity = float(data.get('complexity', 0.2))
+        room_size = int(data.get('room_size', 5))
+        num_rooms = int(data.get('map_num_rooms', 5))
+        seed = data.get('seed', None)
+        
+        if seed is None:
+            seed = random.randint(0, 100000)
+        
+        # Run single simulation
+        sim_id = str(uuid.uuid4())
+        # Run single simulation
+        sim_id = str(uuid.uuid4())
+        result = _run_single_sim(width, height, policy_name, seed, map_type, complexity, room_size, num_rooms)
+        
+        # Save to timestamped folder: YYYYMMDD_HHMMSS_single_policy
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        folder_name = f"{timestamp}_single_{policy_name}"
+        _save_run(sim_id, result, folder_name)
+        
+        # Save Config for consistency (even single runs)
+        _save_batch_config(folder_name, {
+            'type': 'single',
+            'width': width,
+            'height': height,
+            'height': height,
+            'policy': policy_name,
+            'map_type': map_type,
+            'complexity': complexity,
+            'timestamp': timestamp
+        })
+        
+        return jsonify({
+            'id': sim_id,
+            'config': result['config'],
+            'stats': result['stats'],
+            'history': result['history'],
+            'map': result['map']
+        })
+    except Exception as e:
+        import traceback
+        print(f"ERROR in /api/simulate: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 @app.route('/api/benchmark', methods=['POST'])
 def start_benchmark():

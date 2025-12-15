@@ -762,6 +762,11 @@ async function loadSimulationByID(id, element) {
 function loadSimulationData(data) {
     simulationData = data;
 
+    // Uncompress history if needed (delta encoded)
+    if (data.history.length > 0 && !data.history[0].belief_map && data.history[0].belief_diff) {
+        reconstructHistory(data);
+    }
+
     setupCanvas(data.config.width, data.config.height);
     timeline.max = simulationData.history.length - 1;
     timeline.value = 0;
@@ -772,6 +777,38 @@ function loadSimulationData(data) {
 
     // Auto play on load
     play();
+}
+
+function reconstructHistory(data) {
+    // Use map dimensions for consistency with rendering if available
+    const w = parseInt(data.map ? data.map.width : data.config.width);
+    const h = parseInt(data.map ? data.map.height : data.config.height);
+
+    // Initialize current map with -1 (unknown)
+    let currentMap = [];
+    for (let y = 0; y < h; y++) {
+        let row = [];
+        for (let x = 0; x < w; x++) row.push(-1);
+        currentMap.push(row);
+    }
+
+    // Iterate through history and apply diffs
+    data.history.forEach(state => {
+        if (state.belief_diff) {
+            state.belief_diff.forEach(change => {
+                const r = change[0];
+                const c = change[1];
+                const val = change[2];
+                // r is row (y), c is col (x)
+                if (r >= 0 && r < h && c >= 0 && c < w) {
+                    currentMap[r][c] = val;
+                }
+            });
+        }
+        // Save snapshot of full map for rendering
+        // Use map/slice for faster copy than JSON.parse/stringify
+        state.belief_map = currentMap.map(row => row.slice());
+    });
 }
 
 function updateStats() {
@@ -865,6 +902,7 @@ function renderBeliefMap(state, map) {
     ctxBelief.fillRect(0, 0, canvasBelief.width, canvasBelief.height);
 
     for (let y = 0; y < h; y++) {
+        if (!belief[y]) continue; // Safety check
         for (let x = 0; x < w; x++) {
             const cell = belief[y][x];
             if (cell === 0) {

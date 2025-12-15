@@ -21,6 +21,9 @@ class GridMap:
         # Start Position
         self.start_pos = (0, 0)
         
+        # Cache for optimization
+        self._free_cells = None
+        
         self.generate_map()
         
     def generate_map(self):
@@ -84,10 +87,8 @@ class GridMap:
             
             if not overlap:
                 rooms.append(new_room)
-                # Carve room
-                for ry in range(y, y + h):
-                    for rx in range(x, x + w):
-                        self.grid[ry, rx] = 0
+                # Carve room (vectorized)
+                self.grid[y:y+h, x:x+w] = 0
                         
         # 3. Connect rooms with nearest-neighbor approach
         if len(rooms) > 1:
@@ -154,28 +155,26 @@ class GridMap:
             self._carve_corridor(cx1, cy1, cx2, cy2)
     
     def _carve_corridor(self, x1, y1, x2, y2):
-        """Carve an L-shaped corridor between two points."""
+        """Carve an L-shaped corridor between two points (optimized)."""
+        # Clamp coordinates to valid bounds
+        x1 = max(0, min(x1, self.width - 1))
+        x2 = max(0, min(x2, self.width - 1))
+        y1 = max(0, min(y1, self.height - 1))
+        y2 = max(0, min(y2, self.height - 1))
+        
         # Randomly choose H-then-V or V-then-H
         if self.rng.choice([True, False]):
-            # Horizontal then Vertical
+            # Horizontal then Vertical (vectorized)
             x_start, x_end = min(x1, x2), max(x1, x2)
-            for x in range(x_start, x_end + 1):
-                if 0 <= y1 < self.height and 0 <= x < self.width:
-                    self.grid[y1, x] = 0
+            self.grid[y1, x_start:x_end+1] = 0
             y_start, y_end = min(y1, y2), max(y1, y2)
-            for y in range(y_start, y_end + 1):
-                if 0 <= y < self.height and 0 <= x2 < self.width:
-                    self.grid[y, x2] = 0
+            self.grid[y_start:y_end+1, x2] = 0
         else:
-            # Vertical then Horizontal
+            # Vertical then Horizontal (vectorized)
             y_start, y_end = min(y1, y2), max(y1, y2)
-            for y in range(y_start, y_end + 1):
-                if 0 <= y < self.height and 0 <= x1 < self.width:
-                    self.grid[y, x1] = 0
+            self.grid[y_start:y_end+1, x1] = 0
             x_start, x_end = min(x1, x2), max(x1, x2)
-            for x in range(x_start, x_end + 1):
-                if 0 <= y2 < self.height and 0 <= x < self.width:
-                    self.grid[y2, x] = 0
+            self.grid[y2, x_start:x_end+1] = 0
 
     def _add_object_clutter(self, rooms):
         # Complexity controls density of objects
@@ -212,36 +211,29 @@ class GridMap:
                 current_obj_area += (ow * oh)
 
     def _post_process(self):
-        """Ensure start is free and place targets."""
-        # Find valid start position
-        free_indices = np.argwhere(self.grid == 0)
-        if len(free_indices) > 0:
-            start_idx = self.rng.choice(free_indices)
-            self.start_pos = (int(start_idx[1]), int(start_idx[0])) # x, y
+        """Ensure start is free and place targets (optimized)."""
+        # Pre-compute and cache free cells (much faster than argwhere)
+        free_y, free_x = np.where(self.grid == 0)
+        self._free_cells = list(zip(free_x, free_y))  # Store as (x, y) tuples
+        
+        if len(self._free_cells) > 0:
+            # Randomly select start position from free cells
+            self.start_pos = self.rng.choice(self._free_cells)
+            
+            # Place target (exclude start position)
+            target_candidates = [cell for cell in self._free_cells if cell != self.start_pos]
+            if target_candidates:
+                self.targets.append(self.rng.choice(target_candidates))
+            else:
+                # Fallback: only one free cell exists
+                self.targets.append(self.start_pos)
         else:
-            # Fallback if map is full (shouldn't happen)
+            # Fallback if map is completely full (shouldn't happen)
             self.start_pos = (0, 0)
             self.grid[0, 0] = 0
-            
-        # Add a target
-        attempts = 0
-        while True:
-            tx = self.rng.randint(0, self.width - 1)
-            ty = self.rng.randint(0, self.height - 1)
-            # Ensure target is free and NOT same as start
-            if self.grid[ty, tx] == 0 and (tx != self.start_pos[0] or ty != self.start_pos[1]):
-                self.targets.append((tx, ty))
-                break
-            
-            attempts += 1
-            if attempts > 1000:
-                # Fallback
-                tx, ty = (self.width-1, self.height-1)
-                if (tx, ty) == self.start_pos:
-                     tx, ty = (0, 0)
-                self.grid[ty, tx] = 0
-                self.targets.append((tx, ty))
-                break
+            self.targets.append((self.width-1, self.height-1))
+            self.grid[self.height-1, self.width-1] = 0
+            self._free_cells = [self.start_pos, self.targets[0]]
 
     def is_obstacle(self, x, y):
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -250,9 +242,9 @@ class GridMap:
 
     def to_dict(self):
         return {
-            'width': self.width,
-            'height': self.height,
-            'grid': self.grid.tolist(),
-            'targets': self.targets,
-            'start_pos': self.start_pos
+            'width': int(self.width),
+            'height': int(self.height),
+            'grid': self.grid.tolist(),  # Convert NumPy array to list
+            'targets': [(int(x), int(y)) for x, y in self.targets],  # Convert tuples with ints
+            'start_pos': (int(self.start_pos[0]), int(self.start_pos[1]))  # Convert tuple with ints
         }

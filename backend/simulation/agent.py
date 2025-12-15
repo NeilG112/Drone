@@ -86,8 +86,8 @@ class Agent:
 
     def get_state(self):
         return {
-            'x': self.x,
-            'y': self.y,
+            'x': int(self.x),
+            'y': int(self.y),
             'belief_map': self.belief_map.tolist(),
-            'found_targets': self.found_targets
+            'found_targets': [(int(x), int(y)) for x, y in self.found_targets]
         }
