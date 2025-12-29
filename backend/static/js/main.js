@@ -616,9 +616,9 @@ function renderComparisonTable(summary) {
 
 // Constraint Logic
 function updateRoomConstraints() {
-    const w = parseInt(document.getElementById('width').value) || 20;
-    const h = parseInt(document.getElementById('height').value) || 20;
-    const roomSize = parseInt(document.getElementById('room-size').value) || 5;
+    const w = parseInt(document.getElementById('width').value) || 100;
+    const h = parseInt(document.getElementById('height').value) || 100;
+    const roomSize = parseInt(document.getElementById('room-size').value) || 15;
 
     // Estimate max rooms
     const totalArea = w * h;

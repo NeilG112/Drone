@@ -137,7 +137,14 @@ def _run_benchmark_background(job_id, width, height, policy_name, num_runs, map_
                 'targets_found': stats['targets_found'],
                 'efficiency': stats.get('efficiency', 0),
                 'turns': stats.get('turns', 0),
-                'collisions': stats.get('collisions', 0)
+                'collisions': stats.get('collisions', 0),
+                'revisits': stats.get('revisits', 0),
+                'max_cell_visits': stats.get('max_cell_visits', 0),
+                'avg_visits_per_cell': stats.get('avg_visits_per_cell', 0),
+                'avg_info_gain': stats.get('avg_information_gain', 0),
+                'turn_rate': stats.get('turn_rate', 0),
+                'collision_rate': stats.get('collision_rate', 0),
+                'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0)
             })
             
             # Update Progress
@@ -237,7 +244,14 @@ def _run_compare_background(job_id, width, height, num_runs, policies, map_type,
                     'targets_found': stats['targets_found'],
                     'efficiency': stats.get('efficiency', 0),
                     'turns': stats.get('turns', 0),
-                    'collisions': stats.get('collisions', 0)
+                    'collisions': stats.get('collisions', 0),
+                    'revisits': stats.get('revisits', 0),
+                    'max_cell_visits': stats.get('max_cell_visits', 0),
+                    'avg_visits_per_cell': stats.get('avg_visits_per_cell', 0),
+                    'avg_info_gain': stats.get('avg_information_gain', 0),
+                    'turn_rate': stats.get('turn_rate', 0),
+                    'collision_rate': stats.get('collision_rate', 0),
+                    'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0)
                 }
                 
                 # Aggregate stats
@@ -283,7 +297,6 @@ def _run_compare_background(job_id, width, height, num_runs, policies, map_type,
             
             summary.append({
                 'policy': p,
-                'success_rate': (success_count / num_runs) * 100,
                 'success_rate': (success_count / num_runs) * 100,
                 'avg_steps': round(avg_steps, 2),
                 'avg_turns': round(avg_turns, 2),
@@ -365,7 +378,14 @@ def get_folder_runs(folder_name):
                         'coverage': stats.get('coverage_percent', 0),
                         'efficiency': stats.get('efficiency', 0),
                         'turns': stats.get('turns', 0),
-                        'collisions': stats.get('collisions', 0)
+                        'collisions': stats.get('collisions', 0),
+                        'revisits': stats.get('revisits', 0),
+                        'max_cell_visits': stats.get('max_cell_visits', 0),
+                        'avg_visits_per_cell': stats.get('avg_visits_per_cell', 0),
+                        'avg_info_gain': stats.get('avg_information_gain', 0),
+                        'turn_rate': stats.get('turn_rate', 0),
+                        'collision_rate': stats.get('collision_rate', 0),
+                        'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0)
                     })
             except Exception as e:
                 print(f"Error reading {fpath}: {e}")
@@ -390,7 +410,6 @@ def download_folder_csv(folder_name):
     else:
         return jsonify({'error': 'CSV file not found'}), 404
 
-
 def _write_csv_summary(folder_name, runs):
     folder_path = os.path.join(DATA_DIR, folder_name)
     csv_path = os.path.join(folder_path, "summary.csv")
@@ -398,11 +417,12 @@ def _write_csv_summary(folder_name, runs):
     if not runs:
         return
         
-    # Get headers from first run + reorder for readability
-    # Expected fields: id, policy, seed, success, steps, coverage, density, unique_visited, targets_found
-    # Get headers from first run + reorder for readability
-    # Keys in run_summary: 'id', 'seed', 'policy', 'success', 'steps', 'coverage', 'density', 'unique_visited', 'targets_found', 'efficiency', 'turns', 'collisions'
-    headers = ['id', 'policy', 'seed', 'success', 'steps', 'coverage', 'density', 'unique_visited', 'targets_found', 'efficiency', 'turns', 'collisions']
+    headers = [
+        'id', 'policy', 'seed', 'success', 'steps', 'coverage', 'density', 
+        'unique_visited', 'targets_found', 'efficiency', 'turns', 'collisions',
+        'revisits', 'max_cell_visits', 'avg_visits_per_cell', 'avg_info_gain',
+        'turn_rate', 'collision_rate', 'max_steps_without_new_info'
+    ]
     
     try:
         with open(csv_path, 'w', newline='') as f:
