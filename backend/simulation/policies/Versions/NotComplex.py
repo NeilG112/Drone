@@ -1,8 +1,10 @@
 import numpy as np
 import math
 import random
-from .base import NavigationPolicy
+from ..base import NavigationPolicy
 from collections import deque
+
+
 
 class SYSTEMATICCOMPLEXCOVERAGE(NavigationPolicy):
     """

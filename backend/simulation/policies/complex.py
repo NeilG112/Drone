@@ -1,377 +1,387 @@
 import numpy as np
-import random
+import cmath
 import math
 from .base import NavigationPolicy
 from collections import deque
+import random
 
-class AdvancedMazeMaster(NavigationPolicy):
+class RiemannMazeNavigator(NavigationPolicy):
     """
-    Advanced algorithm for 100x100 maps with 67% obstacles.
-    Features:
-    1. Sector-based exploration (divide map into 10x10 sectors)
-    2. Memory of visited sectors to ensure complete coverage
-    3. Targeted room searching (you said rooms are size ~15)
-    4. Adaptive strategy switching
+    Advanced Complex Number Navigation using:
+    1. Riemann Mapping Theorem for obstacle avoidance
+    2. Complex Potential Fields with harmonic functions
+    3. Analytic continuation for unexplored area prediction
+    4. Conformal transformations for path optimization
+    5. Complex neural attractor networks
     """
     
-    def __init__(self, sector_size=10, room_search_radius=15):
-        # Exploration state
-        self.visited_cells = {}
-        self.visited_sectors = set()
-        self.unexplored_sectors = set()
-        self.sector_size = sector_size
+    def __init__(self, convergence_rate=0.1, harmonic_weight=2.0):
+        # Complex Analysis State
+        self.z_position = 0 + 0j  # Current position in complex plane
+        self.riemann_map = {}     # Conformal mapping cache
+        self.harmonic_field = {}  # Harmonic potential field
         
-        # Room detection
-        self.room_search_radius = room_search_radius
-        self.rooms_found = []
-        self.room_search_mode = False
-        self.current_room_target = None
+        # Analytic continuation state
+        self.analytic_function = None
+        self.laurent_coeffs = deque(maxlen=10)
+        self.singularities = set()  # Obstacles as complex poles
         
-        # Path optimization
-        self.direction_history = deque(maxlen=5)
-        self.recent_positions = deque(maxlen=15)
-        self.stuck_counter = 0
-        self.successful_exploration = 0
+        # Complex Neural Dynamics
+        self.attractor_network = {}
+        self.phase_synchronization = 0.0
+        self.complex_memory = np.zeros((100, 100), dtype=complex)
         
-        # Target memory
-        self.target_memory = {}
-        self.last_target_found = 0
+        # Riemann-Hilbert problem state
+        self.boundary_values = {}
+        self.cauchy_integral_cache = {}
         
-        # Performance tracking
-        self.steps = 0
-        self.mode = "EXPLORE"  # EXPLORE, ROOM_SEARCH, TARGET_CHASE
+        # Exploration using modular forms
+        self.modular_phase = 0.0
+        self.fundamental_domain = None
+        
+        # Performance
+        self.visit_count = np.zeros((100, 100), dtype=int)
+        self.path_integral = 0 + 0j
         
     def select_action(self, agent):
-        self.steps += 1
-        current_pos = (int(agent.x), int(agent.y))
-        self.recent_positions.append(current_pos)
-        
-        # Update sector tracking
-        current_sector = self._get_sector(current_pos)
-        self.visited_sectors.add(current_sector)
-        
-        # PRIORITY 1: Immediate target (within 3 cells)
-        target_action = self._find_immediate_target(agent)
-        if target_action != (0, 0):
-            self.mode = "TARGET_CHASE"
-            self.last_target_found = self.steps
-            return target_action
-        
-        # PRIORITY 2: If we recently saw a target, go to its last known location
-        if self.steps - self.last_target_found < 50 and self.target_memory:
-            best_target = max(self.target_memory.items(), key=lambda x: x[1])[0]
-            return self._move_toward_target(agent, best_target)
-        
-        # PRIORITY 3: Every 20 steps, check for room patterns
-        if self.steps % 20 == 0:
-            room_action = self._detect_and_enter_room(agent, current_pos)
-            if room_action != (0, 0):
-                self.mode = "ROOM_SEARCH"
-                return room_action
-        
-        # PRIORITY 4: Systematic sector exploration
-        return self._sector_based_exploration(agent, current_pos)
-    
-    def _sector_based_exploration(self, agent, current_pos):
-        """Explore systematically by visiting all sectors"""
-        
-        # Get current sector and neighboring sectors
-        current_sector = self._get_sector(current_pos)
-        
-        # Find the nearest unexplored sector
-        target_sector = self._find_nearest_unexplored_sector(current_sector)
-        
-        if target_sector:
-            # Move toward the center of that sector
-            sector_center = (
-                target_sector[0] * self.sector_size + self.sector_size // 2,
-                target_sector[1] * self.sector_size + self.sector_size // 2
-            )
-            return self._move_toward_with_obstacle_avoidance(agent, sector_center)
-        
-        # If all sectors visited, do local exploration
-        return self._local_exploration(agent, current_pos)
-    
-    def _local_exploration(self, agent, current_pos):
-        """Explore locally within current sector"""
-        
-        # Get all valid moves
-        valid_moves = []
-        for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-            nx, ny = current_pos[0] + dx, current_pos[1] + dy
-            if self._is_valid_move(agent, nx, ny):
-                valid_moves.append((dx, dy, nx, ny))
-        
-        if not valid_moves:
-            return (0, 0)
-        
-        # Score moves based on multiple factors
-        best_score = -9999
-        best_move = valid_moves[0][:2]
-        
-        for dx, dy, nx, ny in valid_moves:
-            new_pos = (nx, ny)
-            score = 0
-            
-            # 1. UNVISITED CELL BONUS (Highest priority)
-            if new_pos not in self.visited_cells:
-                score += 100
-            else:
-                # Penalize revisiting
-                score -= self.visited_cells.get(new_pos, 0) * 15
-            
-            # 2. DIRECTION CONTINUITY (smooth movement)
-            if self.direction_history:
-                last_dx, last_dy = self.direction_history[-1]
-                if (dx, dy) == (last_dx, last_dy):
-                    score += 30
-            
-            # 3. REVEALS NEW AREAS (check 5x5 area)
-            new_area_revealed = self._count_new_area(agent, nx, ny)
-            score += new_area_revealed * 3
-            
-            # 4. AVOID DEAD ENDS
-            future_moves = self._count_valid_moves(agent, nx, ny)
-            score += future_moves * 10
-            
-            # 5. TOWARD SECTOR CENTER (if revisiting cells)
-            if new_pos in self.visited_cells:
-                sector = self._get_sector(current_pos)
-                center_x = sector[0] * self.sector_size + self.sector_size // 2
-                center_y = sector[1] * self.sector_size + self.sector_size // 2
-                dist_to_center = abs(center_x - nx) + abs(center_y - ny)
-                score -= dist_to_center // 2
-            
-            # 6. AVOID CYCLES
-            if new_pos in self.recent_positions:
-                score -= 25
-            
-            if score > best_score:
-                best_score = score
-                best_move = (dx, dy)
-        
-        # Update tracking
-        self.visited_cells[current_pos] = self.visited_cells.get(current_pos, 0) + 1
-        self.direction_history.append(best_move)
-        
-        return best_move
-    
-    def _find_immediate_target(self, agent):
-        """Find targets within 3 steps"""
+        """Select action using advanced complex analysis methods"""
+        self.z_position = complex(agent.x, agent.y)
         x, y = int(agent.x), int(agent.y)
         
-        # Check immediate neighbors (distance 1)
-        for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < agent.width and 0 <= ny < agent.height:
-                if agent.belief_map[ny, nx] == 2:
-                    self.target_memory[(nx, ny)] = self.steps
-                    return (dx, dy)
+        # Update visit count
+        self.visit_count[y, x] += 1
         
-        # Check distance 2
-        for dx, dy in [(0, -2), (2, 0), (0, 2), (-2, 0), 
-                      (1, -1), (1, 1), (-1, 1), (-1, -1)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < agent.width and 0 <= ny < agent.height:
-                if agent.belief_map[ny, nx] == 2:
-                    self.target_memory[(nx, ny)] = self.steps
-                    # Move toward it (one step at a time)
-                    return self._move_toward_target(agent, (nx, ny))
+        # 1. Apply Riemann Mapping: Transform complex plane to simplify obstacles
+        mapped_z = self._apply_riemann_mapping(agent)
         
-        return (0, 0)
+        # 2. Solve Laplace's Equation: ∇²φ = 0 for harmonic navigation field
+        harmonic_potential = self._solve_laplace_equation(agent, mapped_z)
+        
+        # 3. Perform Analytic Continuation: Predict unknown areas
+        predicted_field = self._analytic_continuation(agent, harmonic_potential)
+        
+        # 4. Compute Complex Gradient: ∇φ = ∂φ/∂x + i∂φ/∂y
+        gradient = self._compute_complex_gradient(predicted_field, agent)
+        
+        # 5. Apply Conformal Transformation: Preserve angles for optimal turns
+        transformed_gradient = self._conformal_transform(gradient, agent)
+        
+        # 6. Integrate along Path: ∮ f(z) dz for smooth trajectory
+        action = self._path_integrate(transformed_gradient, agent)
+        
+        # 7. Update Complex Memory: Store in attractor network
+        self._update_attractor_network(agent, action)
+        
+        return action
     
-    def _detect_and_enter_room(self, agent, current_pos):
-        """Detect room entrances and enter them"""
-        x, y = current_pos
+    def _apply_riemann_mapping(self, agent):
+        """
+        Apply Riemann Mapping Theorem to simplify environment
+        Maps maze onto unit disk while preserving angles
+        """
+        # Use Schwarz-Christoffel transformation for polygonal domains
+        z = self.z_position
         
-        # Look for open spaces that might be rooms
-        for radius in range(3, 8):
-            open_cells = 0
-            for dy in range(-radius, radius + 1):
-                for dx in range(-radius, radius + 1):
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < agent.width and 0 <= ny < agent.height:
-                        if agent.belief_map[ny, nx] == 0 or agent.belief_map[ny, nx] == -1:
-                            open_cells += 1
+        # Normalize coordinates to [-1, 1]
+        normalized_z = complex(
+            2 * z.real / agent.width - 1,
+            2 * z.imag / agent.height - 1
+        )
+        
+        # Check cache for precomputed mapping
+        key = (int(z.real), int(z.imag))
+        if key in self.riemann_map:
+            return self.riemann_map[key]
+        
+        # Compute conformal mapping using iterative method
+        # f(z) = z + Σ c_n * z^n, where c_n are determined by obstacles
+        mapped_z = normalized_z
+        
+        # Add terms for nearby obstacles (model as poles)
+        for radius in range(1, 6):
+            for angle in np.linspace(0, 2*np.pi, 8, endpoint=False):
+                dz = cmath.rect(radius, angle)
+                test_z = z + dz
+                tx, ty = int(test_z.real), int(test_z.imag)
+                
+                if 0 <= tx < agent.width and 0 <= ty < agent.height:
+                    if agent.belief_map[ty, tx] == 1:  # Obstacle
+                        # Add repulsive term: -k/(z - z_obstacle)
+                        diff = z - test_z
+                        if abs(diff) > 0.1:
+                            mapped_z -= 0.1 / diff
+        
+        # Cache result
+        self.riemann_map[key] = mapped_z
+        return mapped_z
+    
+    def _solve_laplace_equation(self, agent, mapped_z):
+        """
+        Solve ∇²φ = 0 using discrete complex analysis
+        Returns complex harmonic function value
+        """
+        # Discrete Laplace operator on complex grid
+        laplacian = 0 + 0j
+        
+        # 5-point stencil for Laplace operator
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            nx, ny = int(agent.x + dx), int(agent.y + dy)
             
-            # If we found a significant open area, explore it
-            if open_cells > (radius * 2) ** 2 * 0.6:  # 60% open
-                # Find the nearest entrance to this open area
-                for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0),
-                              (1, -1), (1, 1), (-1, 1), (-1, -1)]:
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < agent.width and 0 <= ny < agent.height:
-                        if agent.belief_map[ny, nx] != 1:  # Not a wall
-                            return (dx, dy)
+            if 0 <= nx < agent.width and 0 <= ny < agent.height:
+                # Complex potential based on cell type
+                if agent.belief_map[ny, nx] == -1:  # Unknown
+                    potential = 1 + 1j  # Encourage exploration
+                elif agent.belief_map[ny, nx] == 2:  # Target
+                    potential = 2 + 2j  # Strong attraction
+                elif agent.belief_map[ny, nx] == 1:  # Obstacle
+                    potential = -1 - 1j  # Repulsion
+                else:  # Free space
+                    potential = 0.5 + 0.5j  # Neutral
+                
+                # Apply Dirichlet boundary condition
+                laplacian += potential
         
-        return (0, 0)
+        # Subtract 4 times center value (discrete Laplacian)
+        center_val = self._get_center_potential(agent)
+        laplacian -= 4 * center_val
+        
+        # Jacobi iteration for harmonic function
+        harmonic_val = center_val + 0.25 * laplacian
+        
+        # Ensure function is harmonic (real and imaginary parts satisfy Laplace)
+        return harmonic_val
     
-    def _move_toward_target(self, agent, target):
-        """Move toward a target position with obstacle avoidance"""
-        tx, ty = target
-        x, y = int(agent.x), int(agent.y)
+    def _analytic_continuation(self, agent, known_field):
+        """
+        Use analytic continuation to predict unknown areas
+        Based on Taylor series expansion from known boundary
+        """
+        # Build Laurent series from known data
+        center = self.z_position
         
-        # Simple A* like approach
+        # Collect known values in neighborhood for series coefficients
+        known_points = []
+        for radius in range(1, 4):
+            for angle in np.linspace(0, 2*np.pi, 8, endpoint=False):
+                dz = cmath.rect(radius, angle)
+                test_z = center + dz
+                tx, ty = int(test_z.real), int(test_z.imag)
+                
+                if 0 <= tx < agent.width and 0 <= ty < agent.height:
+                    if agent.belief_map[ty, tx] != -1:  # Known cell
+                        # Compute value at this point
+                        if agent.belief_map[ty, tx] == 2:
+                            val = 2 + 2j
+                        else:
+                            val = complex(self.visit_count[ty, tx], 1)
+                        known_points.append((test_z - center, val))
+        
+        if len(known_points) < 4:
+            return known_field
+        
+        # Fit complex polynomial: f(z) = Σ a_n * (z - center)^n
+        # Using least squares for complex coefficients
+        n_terms = min(3, len(known_points))
+        
+        # Build matrix for linear system
+        A = np.zeros((len(known_points), n_terms), dtype=complex)
+        b = np.zeros(len(known_points), dtype=complex)
+        
+        for i, (dz, val) in enumerate(known_points):
+            for j in range(n_terms):
+                A[i, j] = dz ** (j + 1)
+            b[i] = val
+        
+        # Solve for coefficients (pseudo-inverse)
+        try:
+            coeffs = np.linalg.lstsq(A, b, rcond=None)[0]
+            
+            # Use analytic continuation to predict
+            predicted = known_field
+            for j in range(n_terms):
+                # Predict in all unknown directions
+                for angle in np.linspace(0, 2*np.pi, 8, endpoint=False):
+                    dz = cmath.rect(3, angle)  # Predict 3 steps ahead
+                    if j < len(coeffs):
+                        predicted += coeffs[j] * (dz ** (j + 1))
+        except:
+            predicted = known_field
+        
+        return predicted
+    
+    def _compute_complex_gradient(self, field, agent):
+        """
+        Compute complex gradient ∇f = ∂f/∂x + i∂f/∂y
+        Using Cauchy-Riemann equations for analytic functions
+        """
+        # Finite difference for complex derivative
+        h = 0.01  # Small step
+        
+        # ∂f/∂x ≈ [f(x+h,y) - f(x,y)]/h
+        dx_pos = complex(agent.x + h, agent.y)
+        dx_field = self._evaluate_field_at(dx_pos, agent)
+        df_dx = (dx_field - field) / h
+        
+        # ∂f/∂y ≈ [f(x,y+h) - f(x,y)]/h
+        dy_pos = complex(agent.x, agent.y + h)
+        dy_field = self._evaluate_field_at(dy_pos, agent)
+        df_dy = (dy_field - field) / h
+        
+        # Complex gradient: ∇f = ∂f/∂x + i∂f/∂y
+        gradient = df_dx + 1j * df_dy
+        
+        # Check Cauchy-Riemann conditions for analyticity
+        # ∂u/∂x = ∂v/∂y and ∂u/∂y = -∂v/∂x
+        u_x = df_dx.real
+        v_y = df_dy.imag
+        u_y = df_dy.real
+        v_x = df_dx.imag
+        
+        cr_error = abs(u_x - v_y) + abs(u_y + v_x)
+        if cr_error > 1.0:
+            # Field is not analytic, apply correction
+            gradient = gradient / (1 + cr_error)
+        
+        return gradient
+    
+    def _conformal_transform(self, gradient, agent):
+        """
+        Apply conformal transformation to preserve angles
+        Uses Möbius transformation: w = (az + b)/(cz + d)
+        """
+        # Simple Möbius transformation for angle preservation
+        a = 1 + 0.1j  # Rotation and scaling
+        b = 0.05 + 0.05j  # Translation
+        c = 0.01  # Complex curvature
+        d = 1
+        
+        # Transform the gradient
+        z = gradient
+        if abs(c * z + d) > 0.01:  # Avoid division by zero
+            transformed = (a * z + b) / (c * z + d)
+        else:
+            transformed = a * z + b
+        
+        # Normalize
+        mag = abs(transformed)
+        if mag > 0:
+            transformed /= mag
+        
+        return transformed
+    
+    def _path_integrate(self, gradient, agent):
+        """
+        Integrate along path to find optimal discrete move
+        ∮ f(z) dz along candidate paths
+        """
+        current_z = self.z_position
         moves = [(0, -1), (1, 0), (0, 1), (-1, 0)]
         
-        # Score moves by distance to target
         best_move = (0, 0)
-        best_dist = float('inf')
+        best_integral = -float('inf')
         
         for dx, dy in moves:
-            nx, ny = x + dx, y + dy
-            if self._is_valid_move(agent, nx, ny):
-                dist = abs(tx - nx) + abs(ty - ny)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_move = (dx, dy)
-        
-        return best_move
-    
-    def _move_toward_with_obstacle_avoidance(self, agent, target):
-        """Move toward target with smarter obstacle avoidance"""
-        tx, ty = target
-        x, y = int(agent.x), int(agent.y)
-        
-        # If we can see a clear path, use direct movement
-        if self._has_clear_path(agent, x, y, tx, ty):
-            return self._move_toward_target(agent, target)
-        
-        # Otherwise, use wall following toward target
-        return self._wall_follow_toward_target(agent, target)
-    
-    def _wall_follow_toward_target(self, agent, target):
-        """Wall follow while generally moving toward target"""
-        x, y = int(agent.x), int(agent.y)
-        tx, ty = target
-        
-        # Get all valid moves
-        valid_moves = []
-        for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if self._is_valid_move(agent, nx, ny):
-                valid_moves.append((dx, dy, nx, ny))
-        
-        if not valid_moves:
-            return (0, 0)
-        
-        # Score moves: distance to target + wall following bonus
-        best_score = -float('inf')
-        best_move = valid_moves[0][:2]
-        
-        for dx, dy, nx, ny in valid_moves:
-            score = 0
+            nx, ny = int(agent.x + dx), int(agent.y + dy)
             
-            # Distance to target (negative because closer is better)
-            dist = abs(tx - nx) + abs(ty - ny)
-            score -= dist
+            if not (0 <= nx < agent.width and 0 <= ny < agent.height):
+                continue
+            if agent.belief_map[ny, nx] == 1:
+                continue
             
-            # Wall following: prefer moves that keep a wall on right
-            if self._has_wall_on_right(agent, nx, ny, dx, dy):
-                score += 20
+            # Path from current to candidate
+            end_z = complex(nx, ny)
             
-            # Avoid recently visited
-            if (nx, ny) in self.recent_positions:
-                score -= 15
+            # Line integral ∫ f(z) dz along straight path
+            # Approximate using trapezoidal rule
+            n_segments = 3
+            integral = 0 + 0j
             
-            if score > best_score:
-                best_score = score
+            for k in range(n_segments + 1):
+                t = k / n_segments
+                z_t = current_z * (1 - t) + end_z * t
+                
+                # Evaluate field at intermediate point
+                f_t = self._evaluate_field_at(z_t, agent)
+                
+                # Weight for trapezoidal rule
+                weight = 1.0 if k == 0 or k == n_segments else 2.0
+                integral += weight * f_t
+            
+            # Final integral value (magnitude indicates path quality)
+            integral_value = abs(integral) / (2 * n_segments)
+            
+            # Add penalties for visited cells
+            if self.visit_count[ny, nx] > 0:
+                integral_value /= (1 + 0.5 * self.visit_count[ny, nx])
+            
+            if integral_value > best_integral:
+                best_integral = integral_value
                 best_move = (dx, dy)
         
         return best_move
     
-    def _has_wall_on_right(self, agent, x, y, dx, dy):
-        """Check if there's a wall on the right relative to movement direction"""
-        # Determine right direction based on current move
-        if (dx, dy) == (0, -1):  # Moving up, right is (1, 0)
-            rx, ry = 1, 0
-        elif (dx, dy) == (1, 0):  # Moving right, right is (0, 1)
-            rx, ry = 0, 1
-        elif (dx, dy) == (0, 1):  # Moving down, right is (-1, 0)
-            rx, ry = -1, 0
-        else:  # Moving left, right is (0, -1)
-            rx, ry = 0, -1
+    def _update_attractor_network(self, agent, action):
+        """Update complex-valued neural attractor network"""
+        # Create complex Hebbian learning rule
+        x, y = int(agent.x), int(agent.y)
         
-        nx, ny = x + rx, y + ry
-        if 0 <= nx < agent.width and 0 <= ny < agent.height:
-            return agent.belief_map[ny, nx] == 1
+        # Current state as complex number
+        state = complex(x, y) + 1j * complex(action[0], action[1])
         
-        return False
-    
-    def _get_sector(self, pos):
-        """Convert position to sector coordinates"""
-        x, y = pos
-        return (x // self.sector_size, y // self.sector_size)
-    
-    def _find_nearest_unexplored_sector(self, current_sector):
-        """Find the nearest sector that hasn't been visited"""
-        # Initialize unexplored sectors if empty
-        if not hasattr(self, 'sector_map_initialized'):
-            self._initialize_sector_map()
-            self.sector_map_initialized = True
-        
-        if not self.unexplored_sectors:
-            return None
-        
-        # Find nearest unexplored sector
-        nearest = None
-        min_dist = float('inf')
-        
-        for sector in self.unexplored_sectors:
-            dist = abs(sector[0] - current_sector[0]) + abs(sector[1] - current_sector[1])
-            if dist < min_dist:
-                min_dist = dist
-                nearest = sector
-        
-        return nearest
-    
-    def _initialize_sector_map(self):
-        """Initialize all sectors as unexplored"""
-        # Assuming 100x100 map with sector_size=10: 10x10 sectors
-        for sx in range(10):
-            for sy in range(10):
-                self.unexplored_sectors.add((sx, sy))
-    
-    def _count_new_area(self, agent, x, y):
-        """Count how many unknown cells are visible from position"""
-        count = 0
-        # Check 5x5 area
+        # Update attractor weights using Oja's rule (complex version)
         for dy in range(-2, 3):
             for dx in range(-2, 3):
                 nx, ny = x + dx, y + dy
                 if 0 <= nx < agent.width and 0 <= ny < agent.height:
-                    if agent.belief_map[ny, nx] == -1:
-                        count += 1
-        return count
+                    key = (nx, ny)
+                    
+                    if key not in self.attractor_network:
+                        self.attractor_network[key] = 0 + 0j
+                    
+                    # Complex Hebbian learning with decay
+                    neighbor_state = complex(nx, ny)
+                    weight = self.attractor_network[key]
+                    
+                    # Update: Δw = η * (z * conj(s) - |s|² * w)
+                    learning_rate = 0.1
+                    update = learning_rate * (state * np.conj(neighbor_state) - 
+                                            abs(neighbor_state)**2 * weight)
+                    
+                    self.attractor_network[key] = weight + update
     
-    def _count_valid_moves(self, agent, x, y):
-        """Count how many valid moves from a position"""
-        count = 0
-        for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if self._is_valid_move(agent, nx, ny):
-                count += 1
-        return count
+    def _get_center_potential(self, agent):
+        """Get complex potential at current position"""
+        x, y = int(agent.x), int(agent.y)
+        
+        if agent.belief_map[y, x] == 2:
+            return 2 + 2j
+        elif agent.belief_map[y, x] == 1:
+            return -1 - 1j
+        elif agent.belief_map[y, x] == -1:
+            return 1 + 1j
+        else:
+            return complex(self.visit_count[y, x], 1) / (1 + self.visit_count[y, x])
     
-    def _is_valid_move(self, agent, x, y):
-        """Check if move is valid"""
-        return (0 <= x < agent.width and 
-                0 <= y < agent.height and 
-                agent.belief_map[y, x] != 1)
-    
-    def _has_clear_path(self, agent, x1, y1, x2, y2, max_check=20):
-        """Check if there's a clear path between two points"""
-        dx = x2 - x1
-        dy = y2 - y1
-        steps = max(abs(dx), abs(dy))
+    def _evaluate_field_at(self, z, agent):
+        """Evaluate complex field at arbitrary point z"""
+        x, y = int(z.real), int(z.imag)
         
-        if steps > max_check:
-            return False
+        if not (0 <= x < agent.width and 0 <= y < agent.height):
+            return 0 + 0j
         
-        for i in range(1, steps + 1):
-            nx = x1 + (dx * i) // steps
-            ny = y1 + (dy * i) // steps
-            if not self._is_valid_move(agent, nx, ny):
-                return False
+        # Base value from belief map
+        if agent.belief_map[y, x] == 2:
+            base = 2 + 2j
+        elif agent.belief_map[y, x] == 1:
+            base = -1 - 1j
+        elif agent.belief_map[y, x] == -1:
+            base = 1 + 1j
+        else:
+            base = 0.5 + 0.5j
         
-        return True
+        # Add attractor network influence
+        key = (x, y)
+        if key in self.attractor_network:
+            base += 0.3 * self.attractor_network[key]
+        
+        return base

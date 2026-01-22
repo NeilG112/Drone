@@ -1,6 +1,6 @@
 import numpy as np
 import random
-from ..base import NavigationPolicy
+from .base import NavigationPolicy
 import math
 
 """
