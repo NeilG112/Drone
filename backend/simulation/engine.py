@@ -1,7 +1,7 @@
 import numpy as np
 
 class Simulation:
-    def __init__(self, world, policy, max_steps=500):
+    def __init__(self, world, policy, max_steps=1000):
         self.world = world
         self.policy = policy
         self.max_steps = max_steps
