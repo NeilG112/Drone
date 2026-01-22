@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Search Sim</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="sidebar">
+        <h1>// AUTONOMOUS_SEARCH</h1>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-mode="single">SINGLE</button>
+            <button class="tab-btn" data-mode="benchmark">BENCHMARK</button>
+            <button class="tab-btn" data-mode="compare">COMPARE</button>
+            <button class="tab-btn" data-mode="history">LOGS</button>
+        </div>
+
+        <div class="control-group">
+            <label>>> MAP_DIMENSIONS</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="width" value="100" placeholder="W">
+                <input type="number" id="height" value="100" placeholder="H">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>>> COMPLEXITY (DENSITY/CLUTTER)</label>
+            <input type="range" id="complexity" min="0" max="100" value="67">
+            <div id="complexity-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">67%</div>
+        </div>
+
+        <div class="control-group">
+            <label>>> ROOM SIZE (Side Length)</label>
+            <input type="range" id="room-size" min="3" max="20" value="15">
+            <div id="room-size-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">15</div>
+        </div>
+
+        <div class="control-group">
+            <label>>> NUMBER OF ROOMS</label>
+            <input type="range" id="num-rooms" min="1" max="30" value="10">
+            <div id="num-rooms-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">10</div>
+        </div>
+
+        <div class="control-group">
+            <label>>> NUMBER OF DRONES</label>
+            <input type="range" id="num-drones" min="1" max="10" value="1">
+            <div id="num-drones-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">1</div>
+        </div>
+
+        <div class="control-group">
+            <label>>> NUMBER OF TARGETS</label>
+            <input type="range" id="num-targets" min="1" max="20" value="1">
+            <div id="num-targets-val"
+                style="font-size: 0.7rem; text-align: right; color: var(--text-secondary); margin-top: 5px;">1</div>
+        </div>
+
+        <div class="control-group">
+            <label for="policy">>> PROTOCOL (POLICY)</label>
+            <!-- Single Mode Select -->
+            <select id="policy">
+                <!-- Populated dynamically -->
+            </select>
+
+            <!-- Compare Mode Checkboxes -->
+            <div id="policy-checkboxes" style="display: none; margin-top: 5px;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+
+        <!-- Benchmark specific controls -->
+        <div id="benchmark-controls" style="display: none;">
+            <div class="control-group">
+                <label>>> ITERATIONS</label>
+                <input type="number" id="num-runs" value="5">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>>> CLOCK_CYCLE (SPEED)</label>
+            <input type="range" id="speed-slider" min="10" max="1000" value="100" style="direction: rtl;">
+        </div>
+
+        <button id="run-btn">INITIALIZE_RUN</button>
+    </div>
+
+    <div id="main-content">
+        <!-- Top Visualization Panel -->
+        <div id="viz-panel">
+            <div class="canvas-wrapper">
+                <div class="canvas-title">GROUND_TRUTH</div>
+                <div class="canvas-border">
+                    <canvas id="ground-truth" width="400" height="400"></canvas>
+                </div>
+            </div>
+
+            <div class="canvas-wrapper">
+                <div class="canvas-title">AGENT_BELIEF_STATE</div>
+                <div class="canvas-border">
+                    <canvas id="agent-belief" width="400" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="controls-bar">
+            <button id="play-pause" style="width: 50px; font-size: 1.2rem;">▶</button>
+            <input type="range" id="timeline" min="0" max="100" value="0">
+            <span id="step-counter" style="font-family: var(--font-mono); color: var(--highlight);">000 / 000</span>
+        </div>
+
+        <!-- Bottom Telemetry Deck -->
+        <div id="telemetry-deck">
+            <div class="deck-header" style="display: flex; justify-content: space-between; cursor: pointer;"
+                onclick="toggleDeck()">
+                <span>>> TELEMETRY_ANALYSIS</span>
+                <span id="deck-toggle-icon">▲ MAXIMIZE</span>
+            </div>
+
+            <!-- Live Stats in Deck -->
+            <div id="live-stats">
+                <div class="stat-box">
+                    <label>STATUS</label>
+                    <div id="status-val" class="stat-val">STANDBY</div>
+                </div>
+                <div class="stat-box">
+                    <label>STEPS</label>
+                    <div id="steps-val" class="stat-val">0</div>
+                </div>
+                <div class="stat-box">
+                    <label>TARGETS</label>
+                    <div id="targets-val" class="stat-val">0 / 0</div>
+                </div>
+                <div class="stat-box">
+                    <label>SUCCESS</label>
+                    <div id="success-val" class="stat-val">--</div>
+                </div>
+            </div>
+
+            <!-- Charts Container (Hidden by default, shown for Compare/History) -->
+            <div id="charts-container" style="display: none; width: 100%; margin-top: 10px;">
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                    <div class="chart-box">
+                        <canvas id="successChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="stepsChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="coverageChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="efficiencyChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="turnsChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="collisionsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="right-sidebar">
+        <!-- Run List Container -->
+        <div id="runs-list" style="height: 100%; display: flex; flex-direction: column;">
+            <div id="list-title"
+                style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase;">
+                <span>SYSTEM_LOGS</span>
+            </div>
+
+            <!-- Filter Input (only visible in History mode) -->
+            <div id="history-filter" style="display: none; margin-bottom: 15px;">
+                <input type="text" id="filter-input" placeholder="SEARCH_LOGS..."
+                    style="width: 100%; padding: 8px; background: #000; border: 1px solid var(--text-secondary); color: var(--text-primary);">
+            </div>
+
+            <!-- Content Area for Lists -->
+            <div style="flex: 1; overflow-y: auto; padding-right: 5px;">
+                <!-- History Folders list -->
+                <div id="history-container" style="display: none;"></div>
+                <!-- Benchmark runs list -->
+                <div id="runs-container"></div>
+                <!-- Comparison Table -->
+                <div id="compare-container" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div class="loading-text">SYSTEM_PROCESSING...</div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>
