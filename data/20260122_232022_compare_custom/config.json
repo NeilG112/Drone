@@ -1,0 +1,15 @@
+{
+  "type": "compare",
+  "width": 100,
+  "height": 100,
+  "num_runs": 10,
+  "policies": [
+    "frontier",
+    "swarm"
+  ],
+  "map_type": "floorplan",
+  "complexity": 0.67,
+  "num_drones": 3,
+  "num_targets": 10,
+  "timestamp": "20260122_232022"
+}

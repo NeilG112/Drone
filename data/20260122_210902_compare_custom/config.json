@@ -1,0 +1,13 @@
+{
+  "type": "compare",
+  "width": 100,
+  "height": 100,
+  "num_runs": 100,
+  "policies": [
+    "globalutilityfrontierexploration",
+    "frontier"
+  ],
+  "map_type": "floorplan",
+  "complexity": 0.67,
+  "timestamp": "20260122_210902"
+}
