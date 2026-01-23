@@ -1,9 +1,25 @@
 import random
 import math
 from .base import NavigationPolicy
+from simulation.utils.pathfinding import astar_path
 
 class Swarm(NavigationPolicy):
     def select_action(self, agent):
+        # 0. Check Battery / Return to Base
+        # Estimate distance to start (Manhattan is lower bound, used for heuristic)
+        start_x, start_y = agent.path[0]
+        dist_to_home = abs(agent.x - start_x) + abs(agent.y - start_y)
+        
+        # Safety buffer: 1.5x distance * move cost
+        # If we are low, we must return
+        if agent.battery < (dist_to_home * agent.energy_cost_move * 1.5) + 20:
+             # Use A* for robust return
+             path = astar_path((agent.x, agent.y), (start_x, start_y), agent.belief_map, agent.width, agent.height)
+             if path:
+                 return path[0]
+             else:
+                 return (0, 0) # Stuck or home
+
         # 1. Find N nearest frontiers using BFS
         frontiers = self._find_nearest_frontiers(agent, limit=10)
         
@@ -106,3 +122,5 @@ class Swarm(NavigationPolicy):
                         queue.append(((nx, ny), new_path))
                         
         return found_frontiers
+
+    # _get_move_towards removed in favor of astar_path utility

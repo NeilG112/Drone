@@ -239,3 +239,21 @@ class GridMap:
             'targets': [(int(x), int(y)) for x, y in self.targets],  # Convert tuples with ints
             'start_pos': (int(self.start_pos[0]), int(self.start_pos[1]))  # Convert tuple with ints
         }
+
+    def move_target(self, target_idx, dx, dy):
+        """Moves a specific target by dx, dy if valid and free."""
+        if 0 <= target_idx < len(self.targets):
+            tx, ty = self.targets[target_idx]
+            nx, ny = tx + dx, ty + dy
+            
+            # Check bounds
+            if 0 <= nx < self.width and 0 <= ny < self.height:
+                # Check collision (must be free space)
+                # Ideally targets don't move into walls.
+                if self.grid[ny, nx] == 0:
+                    # Also check if it overlaps with other targets? 
+                    # Usually okay, but let's avoid it for clarity?
+                    if (nx, ny) not in self.targets:
+                         self.targets[target_idx] = (nx, ny)
+                         return True
+        return False

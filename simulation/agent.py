@@ -1,4 +1,10 @@
 import numpy as np
+import random
+try:
+    from simulation.utils.jit_math import jit_has_line_of_sight
+    HAS_JIT = True
+except ImportError:
+    HAS_JIT = False
 
 class Agent:
     def __init__(self, start_x, start_y, width, height, agent_id=0, shared_belief_map=None, shared_found_targets=None):
@@ -22,16 +28,43 @@ class Agent:
             self._owns_belief_map = True
             # Mark start as free
             self.belief_map[start_y, start_x] = 0
+            
+        # CUAP / Coordination State
+        self.victim_prob_map = np.zeros((height, width), dtype=float)
+        self.connected_neighbors = [] # List of agent_ids currently in comms range
+        self.auction_state = {} # Arbitrary dict for policy to store bids/claims
         
         # Use shared found targets list if provided (multi-drone coordination)
+        # Now track by ID (index) instead of position for moving targets
         if shared_found_targets is not None:
-            self.found_targets = shared_found_targets
+            self.found_target_ids = shared_found_targets  # Shared set of found target IDs
         else:
-            self.found_targets = []
+            self.found_target_ids = set()  # Set of target indices that have been found
+            
+        # Battery / Energy System
+        self.max_battery = 500.0
+        self.battery = self.max_battery
+        self.energy_cost_move = 1.0
+        self.energy_cost_sense = 0.5
+        self.is_dead = False
+        
+        # Charging State
+        self.is_charging = False
+        self.charging_timer = 0
+        
+        # Sensor Noise
+        self.sensor_noise = 0.05 # 5% probability of reading flip
             
         self.path = [(start_x, start_y)]
 
     def move(self, dx, dy, world):
+        if self.is_dead:
+            return False
+            
+        if self.battery < self.energy_cost_move:
+             self.is_dead = True
+             return False
+
         new_x, new_y = self.x + dx, self.y + dy
         
         # Check boundary and collision (against ground truth world)
@@ -40,11 +73,29 @@ class Agent:
                 self.x = new_x
                 self.y = new_y
                 self.path.append((self.x, self.y))
+                self.battery -= self.energy_cost_move
                 return True
+        
+        # Even if move fails (collision), we spent energy trying? 
+        # For now, let's say only successful moves cost energy, or attempts cost less.
+        # Let's say attempt costs energy too to discourage wall bumping.
+        self.battery -= self.energy_cost_move
+        if self.battery <= 0:
+            self.battery = 0
+            self.is_dead = True
+            
         return False
 
     def sense(self, world):
         """Simulates range sensor with line-of-sight (blocked by walls)."""
+        if self.is_dead:
+            return
+
+        if self.battery < self.energy_cost_sense:
+            self.is_dead = True
+            return
+
+        self.battery -= self.energy_cost_sense
         sensor_range = 3
         
         for dy in range(-sensor_range, sensor_range + 1):
@@ -53,17 +104,32 @@ class Agent:
                 
                 if 0 <= nx < self.width and 0 <= ny < self.height:
                     # Check if we have line of sight to this cell
-                    if self._has_line_of_sight(self.x, self.y, nx, ny, world):
-                        # Update belief map with Ground Truth
-                        if world.is_obstacle(nx, ny):
+                    has_los = False
+                    if HAS_JIT and hasattr(world, 'grid'):
+                        # Numba optimization
+                        has_los = jit_has_line_of_sight(self.x, self.y, nx, ny, world.grid)
+                    else:
+                        # Fallback
+                        has_los = self._has_line_of_sight(self.x, self.y, nx, ny, world)
+                        
+                    if has_los:
+                        # Update belief map with Ground Truth + Noise
+                        is_obs = world.is_obstacle(nx, ny)
+                        
+                        # Apply noise
+                        if random.random() < self.sensor_noise:
+                            is_obs = not is_obs
+                            
+                        if is_obs:
                             self.belief_map[ny, nx] = 1
                         else:
                             self.belief_map[ny, nx] = 0
                             
-                        # Check for targets
-                        if (nx, ny) in world.targets:
-                            if (nx, ny) not in self.found_targets:
-                                self.found_targets.append((nx, ny))
+                        # Check for targets by index (enables correct tracking of moving targets)
+                        for target_idx, target_pos in enumerate(world.targets):
+                            if (nx, ny) == target_pos:
+                                if target_idx not in self.found_target_ids:
+                                    self.found_target_ids.add(target_idx)
     
     def _has_line_of_sight(self, x0, y0, x1, y1, world):
         """Check if there's a clear line of sight using Bresenham's algorithm."""
@@ -104,5 +170,8 @@ class Agent:
             'x': int(self.x),
             'y': int(self.y),
             'belief_map': self.belief_map.tolist(),
-            'found_targets': [(int(x), int(y)) for x, y in self.found_targets]
+            'found_target_ids': list(self.found_target_ids),  # Convert set to list for JSON
+            'battery': round(self.battery, 1),
+            'is_dead': self.is_dead,
+            'neighbors': self.connected_neighbors
         }

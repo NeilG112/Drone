@@ -5,7 +5,8 @@ const CONFIG = {
         free: '#ffffff',
         wall: '#333333',
         obstacle: '#333333',
-        target: '#03dac6',
+        target: '#ff4444', // Red for targets
+        baseStation: '#00ff88', // Green for base station
         agent: '#cf6679',
         path: 'rgba(207, 102, 121, 0.3)',
         gridLine: '#333'
@@ -72,6 +73,7 @@ let isPlaying = false;
 let playbackSpeed = 50;
 let timerId = null;
 let currentMode = 'single';
+let aggregatedStatsData = null; // Store aggregated stats to preserve them
 
 // DOM Elements
 const canvasTruth = document.getElementById('ground-truth');
@@ -213,6 +215,7 @@ tabBtns.forEach(btn => {
 
         } else {
             // Single
+            aggregatedStatsData = null; // Clear aggregated stats in single mode
             listTitle.textContent = "Single Run History";
             runsContainer.style.display = 'block';
             runsContainer.innerHTML = '';
@@ -235,7 +238,8 @@ async function fetchHistory() {
     try {
         const response = await fetch('/api/history');
         const data = await response.json();
-        cachedFolders = data.folders; // Cache for filtering
+        // Sort folders by name in descending order (latest first)
+        cachedFolders = data.folders.sort((a, b) => b.name.localeCompare(a.name));
         renderHistoryList(cachedFolders);
         statusVal.textContent = "Ready";
     } catch (err) {
@@ -306,6 +310,8 @@ async function loadFolderRuns(folderName) {
         const summary = summarizeRunsForCharts(data.runs);
         if (summary.length > 0) {
             renderCharts(summary);
+            // Show aggregated stats from summary
+            displayAggregatedStatsFromSummary(summary);
             // Ensure charts are visible
             document.getElementById('charts-container').style.display = 'block';
         } else {
@@ -329,7 +335,27 @@ function summarizeRunsForCharts(runs) {
     runs.forEach(run => {
         const p = run.policy || 'unknown';
         if (!policies[p]) {
-            policies[p] = { successCount: 0, steps: [], coverages: [], efficiencies: [], turns: [], collisions: [], runs: [] };
+            policies[p] = { 
+                successCount: 0, 
+                steps: [], 
+                coverages: [], 
+                efficiencies: [], 
+                turns: [], 
+                collisions: [], 
+                total_distance: [],
+                avg_distance_per_agent: [],
+                total_idle_steps: [],
+                avg_idle_steps_per_agent: [],
+                total_backtracking: [],
+                avg_backtracking_per_agent: [],
+                avg_frontier_size: [],
+                max_frontier_size: [],
+                avg_exploration_rate: [],
+                avg_network_partitions: [],
+                max_network_partitions: [],
+                communication_connectivity: [],
+                runs: [] 
+            };
         }
         policies[p].runs.push(run);
         if (run.success) {
@@ -342,6 +368,20 @@ function summarizeRunsForCharts(runs) {
         if (run.efficiency !== undefined) policies[p].efficiencies.push(run.efficiency);
         if (run.turns !== undefined) policies[p].turns.push(run.turns);
         if (run.collisions !== undefined) policies[p].collisions.push(run.collisions);
+        
+        // New metrics
+        if (run.total_distance_traveled !== undefined) policies[p].total_distance.push(run.total_distance_traveled);
+        if (run.avg_distance_per_agent !== undefined) policies[p].avg_distance_per_agent.push(run.avg_distance_per_agent);
+        if (run.total_idle_steps !== undefined) policies[p].total_idle_steps.push(run.total_idle_steps);
+        if (run.avg_idle_steps_per_agent !== undefined) policies[p].avg_idle_steps_per_agent.push(run.avg_idle_steps_per_agent);
+        if (run.total_backtracking !== undefined) policies[p].total_backtracking.push(run.total_backtracking);
+        if (run.avg_backtracking_per_agent !== undefined) policies[p].avg_backtracking_per_agent.push(run.avg_backtracking_per_agent);
+        if (run.avg_frontier_size !== undefined) policies[p].avg_frontier_size.push(run.avg_frontier_size);
+        if (run.max_frontier_size !== undefined) policies[p].max_frontier_size.push(run.max_frontier_size);
+        if (run.avg_exploration_rate !== undefined) policies[p].avg_exploration_rate.push(run.avg_exploration_rate);
+        if (run.avg_network_partitions !== undefined) policies[p].avg_network_partitions.push(run.avg_network_partitions);
+        if (run.max_network_partitions !== undefined) policies[p].max_network_partitions.push(run.max_network_partitions);
+        if (run.communication_connectivity !== undefined) policies[p].communication_connectivity.push(run.communication_connectivity);
     });
 
     // Valid policies only
@@ -356,6 +396,20 @@ function summarizeRunsForCharts(runs) {
         const avgTurns = stats.turns && stats.turns.length ? (stats.turns.reduce((a, b) => a + b, 0) / stats.turns.length) : 0;
         const avgColl = stats.collisions && stats.collisions.length ? (stats.collisions.reduce((a, b) => a + b, 0) / stats.collisions.length) : 0;
 
+        // New metrics averages
+        const avgDistance = stats.total_distance.length ? (stats.total_distance.reduce((a, b) => a + b, 0) / stats.total_distance.length) : 0;
+        const avgDistPerAgent = stats.avg_distance_per_agent.length ? (stats.avg_distance_per_agent.reduce((a, b) => a + b, 0) / stats.avg_distance_per_agent.length) : 0;
+        const avgIdleSteps = stats.total_idle_steps.length ? (stats.total_idle_steps.reduce((a, b) => a + b, 0) / stats.total_idle_steps.length) : 0;
+        const avgIdlePerAgent = stats.avg_idle_steps_per_agent.length ? (stats.avg_idle_steps_per_agent.reduce((a, b) => a + b, 0) / stats.avg_idle_steps_per_agent.length) : 0;
+        const avgBacktracking = stats.total_backtracking.length ? (stats.total_backtracking.reduce((a, b) => a + b, 0) / stats.total_backtracking.length) : 0;
+        const avgBacktrackPerAgent = stats.avg_backtracking_per_agent.length ? (stats.avg_backtracking_per_agent.reduce((a, b) => a + b, 0) / stats.avg_backtracking_per_agent.length) : 0;
+        const avgFrontier = stats.avg_frontier_size.length ? (stats.avg_frontier_size.reduce((a, b) => a + b, 0) / stats.avg_frontier_size.length) : 0;
+        const maxFrontier = stats.max_frontier_size.length ? Math.max(...stats.max_frontier_size) : 0;
+        const avgExploration = stats.avg_exploration_rate.length ? (stats.avg_exploration_rate.reduce((a, b) => a + b, 0) / stats.avg_exploration_rate.length) : 0;
+        const avgPartitions = stats.avg_network_partitions.length ? (stats.avg_network_partitions.reduce((a, b) => a + b, 0) / stats.avg_network_partitions.length) : 0;
+        const maxPartitions = stats.max_network_partitions.length ? Math.max(...stats.max_network_partitions) : 0;
+        const avgConnectivity = stats.communication_connectivity.length ? (stats.communication_connectivity.reduce((a, b) => a + b, 0) / stats.communication_connectivity.length) : 0;
+
         return {
             policy: p,
             success_rate: (stats.successCount / total) * 100,
@@ -363,6 +417,18 @@ function summarizeRunsForCharts(runs) {
             avg_efficiency: parseFloat(avgEff.toFixed(3)),
             avg_turns: parseFloat(avgTurns.toFixed(2)),
             avg_collisions: parseFloat(avgColl.toFixed(2)),
+            avg_distance_traveled: parseFloat(avgDistance.toFixed(1)),
+            avg_distance_per_agent: parseFloat(avgDistPerAgent.toFixed(1)),
+            avg_idle_steps: parseFloat(avgIdleSteps.toFixed(1)),
+            avg_idle_steps_per_agent: parseFloat(avgIdlePerAgent.toFixed(1)),
+            avg_backtracking: parseFloat(avgBacktracking.toFixed(1)),
+            avg_backtracking_per_agent: parseFloat(avgBacktrackPerAgent.toFixed(1)),
+            avg_frontier_size: parseFloat(avgFrontier.toFixed(1)),
+            max_frontier_size: maxFrontier,
+            avg_exploration_rate: parseFloat(avgExploration.toFixed(3)),
+            avg_network_partitions: parseFloat(avgPartitions.toFixed(1)),
+            max_network_partitions: maxPartitions,
+            avg_communication_connectivity: parseFloat(avgConnectivity.toFixed(3)),
 
             // Re-construct runs array structure expected by renderCharts logic
             // renderCharts logic calculates avg coverage from (run.coverage || 0)
@@ -430,6 +496,8 @@ async function runComparison() {
         pollJob(jobId, (result) => {
             renderComparisonTable(result.summary);
             renderCharts(result.summary);
+            // Show aggregated stats from comparison
+            displayAggregatedStatsFromSummary(result.summary);
             statusVal.textContent = `Completed Comparison`;
             runBtn.disabled = false;
         });
@@ -449,6 +517,12 @@ let coverageChart = null;
 let efficiencyChart = null;
 let turnsChart = null;
 let collisionsChart = null;
+let distanceChart = null;
+let idleStepsChart = null;
+let backtrackingChart = null;
+let frontierChart = null;
+let explorationChart = null;
+let connectivityChart = null;
 
 function renderCharts(summary) {
     // Reveal the main Telemetry Deck in main content, not sidebar
@@ -480,6 +554,14 @@ function renderCharts(summary) {
     const efficiencyData = summary.map(s => s.avg_efficiency);
     const turnsData = summary.map(s => s.avg_turns);
     const collisionsData = summary.map(s => s.avg_collisions);
+
+    // New metrics data
+    const distanceData = summary.map(s => s.avg_distance_traveled);
+    const idleStepsData = summary.map(s => s.avg_idle_steps);
+    const backtrackingData = summary.map(s => s.avg_backtracking);
+    const frontierData = summary.map(s => s.avg_frontier_size);
+    const explorationData = summary.map(s => s.avg_exploration_rate * 100); // Convert to percentage
+    const connectivityData = summary.map(s => s.avg_communication_connectivity * 100); // Convert to percentage
 
     const commonOptions = {
         responsive: true,
@@ -602,6 +684,108 @@ function renderCharts(summary) {
             }]
         },
         options: commonOptions
+    });
+
+    // 7. Distance Chart
+    if (distanceChart) distanceChart.destroy();
+    distanceChart = new Chart(document.getElementById('distanceChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Distance Traveled',
+                data: distanceData,
+                backgroundColor: 'rgba(76, 175, 80, 0.2)', // Green
+                borderColor: '#4caf50',
+                borderWidth: 1
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 8. Idle Steps Chart
+    if (idleStepsChart) idleStepsChart.destroy();
+    idleStepsChart = new Chart(document.getElementById('idleStepsChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Idle Steps (Lower is Better)',
+                data: idleStepsData,
+                backgroundColor: 'rgba(255, 152, 0, 0.2)', // Orange
+                borderColor: '#ff9800',
+                borderWidth: 1
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 9. Backtracking Chart
+    if (backtrackingChart) backtrackingChart.destroy();
+    backtrackingChart = new Chart(document.getElementById('backtrackingChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Backtracking (Lower is Better)',
+                data: backtrackingData,
+                backgroundColor: 'rgba(156, 39, 176, 0.2)', // Purple
+                borderColor: '#9c27b0',
+                borderWidth: 1
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 10. Frontier Chart
+    if (frontierChart) frontierChart.destroy();
+    frontierChart = new Chart(document.getElementById('frontierChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Frontier Size',
+                data: frontierData,
+                backgroundColor: 'rgba(0, 188, 212, 0.2)', // Cyan
+                borderColor: '#00bcd4',
+                borderWidth: 1
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 11. Exploration Chart
+    if (explorationChart) explorationChart.destroy();
+    explorationChart = new Chart(document.getElementById('explorationChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Exploration Rate (%)',
+                data: explorationData,
+                backgroundColor: 'rgba(255, 235, 59, 0.2)', // Yellow
+                borderColor: '#ffeb3b',
+                borderWidth: 1
+            }]
+        },
+        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
+    });
+
+    // 12. Connectivity Chart
+    if (connectivityChart) connectivityChart.destroy();
+    connectivityChart = new Chart(document.getElementById('connectivityChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Avg Connectivity (%)',
+                data: connectivityData,
+                backgroundColor: 'rgba(255, 87, 34, 0.2)', // Deep Orange
+                borderColor: '#ff5722',
+                borderWidth: 1
+            }]
+        },
+        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
     });
 }
 
@@ -757,7 +941,22 @@ async function runBenchmark() {
 
         // Poll
         pollJob(jobId, (result) => {
+            console.log("Benchmark completed, result:", result);
             renderRunsList(result.runs);
+            // Show aggregated stats
+            displayAggregatedStats(result.runs);
+            // Show telemetry deck for aggregated stats
+            const deck = document.getElementById('telemetry-deck');
+            console.log("Telemetry deck element:", deck);
+            if (deck) {
+                deck.style.display = 'block';
+                // Auto-expand the deck to show the new data
+                if (!deck.classList.contains('expanded')) {
+                    deck.classList.add('expanded');
+                    const icon = document.getElementById('deck-toggle-icon');
+                    if (icon) icon.textContent = "▼ MINIMIZE";
+                }
+            }
             statusVal.textContent = `Completed ${result.runs.length} runs`;
             runBtn.disabled = false;
         });
@@ -821,7 +1020,10 @@ function loadSimulationData(data) {
     timeline.value = 0;
     currentFrame = 0;
 
-    updateStats();
+    // Only update individual run stats in single mode
+    if (currentMode === 'single') {
+        updateStats();
+    }
     renderFrame();
 
     // Auto play on load
@@ -863,21 +1065,303 @@ function reconstructHistory(data) {
 function updateStats() {
     if (!simulationData) return;
 
+    // If we have aggregated stats, display them instead of individual run stats
+    if (aggregatedStatsData && (currentMode === 'benchmark' || currentMode === 'compare')) {
+        displayStoredAggregatedStats();
+        return;
+    }
+
     const stats = simulationData.stats;
     stepsVal.textContent = stats.steps;
     targetsVal.textContent = `${stats.targets_found} / ${stats.targets_total}`;
     successVal.textContent = stats.success ? "YES" : "NO";
+
+    // New metrics
+    document.getElementById('distance-val').textContent = stats.total_distance_traveled ? stats.total_distance_traveled.toFixed(1) : '0.0';
+    document.getElementById('avg-distance-val').textContent = stats.avg_distance_per_agent ? stats.avg_distance_per_agent.toFixed(1) : '0.0';
+    document.getElementById('idle-steps-val').textContent = stats.total_idle_steps || 0;
+    document.getElementById('avg-idle-val').textContent = stats.avg_idle_steps_per_agent ? stats.avg_idle_steps_per_agent.toFixed(1) : '0.0';
+    document.getElementById('backtracking-val').textContent = stats.total_backtracking || 0;
+    document.getElementById('avg-backtrack-val').textContent = stats.avg_backtracking_per_agent ? stats.avg_backtracking_per_agent.toFixed(1) : '0.0';
+    document.getElementById('avg-frontier-val').textContent = stats.avg_frontier_size ? stats.avg_frontier_size.toFixed(1) : '0.0';
+    document.getElementById('max-frontier-val').textContent = stats.max_frontier_size || 0;
+    document.getElementById('exploration-rate-val').textContent = stats.avg_exploration_rate ? (stats.avg_exploration_rate * 100).toFixed(1) + '%' : '0.0%';
+    document.getElementById('avg-partitions-val').textContent = stats.avg_network_partitions ? stats.avg_network_partitions.toFixed(1) : '0.0';
+    document.getElementById('max-partitions-val').textContent = stats.max_network_partitions || 0;
+    document.getElementById('connectivity-val').textContent = stats.communication_connectivity ? (stats.communication_connectivity * 100).toFixed(1) + '%' : '0.0%';
+}
+
+function displayAggregatedStats(runs) {
+    if (!runs || runs.length === 0) return;
+
+    console.log("Calculating aggregated stats for", runs.length, "runs");
+    console.log("Sample run data:", runs[0]);
+
+    // Calculate aggregate statistics across all runs
+    let totalSteps = 0;
+    let successCount = 0;
+    let totalDistance = 0;
+    let totalIdleSteps = 0;
+    let totalBacktracking = 0;
+    let totalFrontierSize = 0;
+    let maxFrontierSize = 0;
+    let totalExplorationRate = 0;
+    let totalNetworkPartitions = 0;
+    let maxNetworkPartitions = 0;
+    let totalConnectivity = 0;
+    let totalTargetsFound = 0;
+
+    runs.forEach(run => {
+        totalSteps += run.steps || 0;
+        if (run.success) successCount++;
+        totalDistance += run.total_distance_traveled || 0;
+        totalIdleSteps += run.total_idle_steps || 0;
+        totalBacktracking += run.total_backtracking || 0;
+        totalFrontierSize += run.avg_frontier_size || 0;
+        maxFrontierSize = Math.max(maxFrontierSize, run.max_frontier_size || 0);
+        totalExplorationRate += run.avg_exploration_rate || 0;
+        totalNetworkPartitions += run.avg_network_partitions || 0;
+        maxNetworkPartitions = Math.max(maxNetworkPartitions, run.max_network_partitions || 0);
+        totalConnectivity += run.communication_connectivity || 0;
+        totalTargetsFound += run.targets_found || 0;
+    });
+
+    const n = runs.length;
+    const avgSteps = totalSteps / n;
+    const avgDistance = totalDistance / n;
+    const avgIdleSteps = totalIdleSteps / n;
+    const avgBacktracking = totalBacktracking / n;
+    const avgFrontierSize = totalFrontierSize / n;
+    const avgExplorationRate = totalExplorationRate / n;
+    const avgNetworkPartitions = totalNetworkPartitions / n;
+    const avgConnectivity = totalConnectivity / n;
+
+    // Store aggregated data for later display
+    aggregatedStatsData = {
+        steps: avgSteps.toFixed(0),
+        targets: totalTargetsFound,
+        success: ((successCount / n) * 100).toFixed(1) + '%',
+        distance: avgDistance.toFixed(1),
+        avg_distance: (avgDistance / (runs[0].num_drones || 1)).toFixed(1),
+        idle_steps: avgIdleSteps.toFixed(0),
+        avg_idle: (avgIdleSteps / (runs[0].num_drones || 1)).toFixed(1),
+        backtracking: avgBacktracking.toFixed(0),
+        avg_backtrack: (avgBacktracking / (runs[0].num_drones || 1)).toFixed(1),
+        avg_frontier: avgFrontierSize.toFixed(1),
+        max_frontier: maxFrontierSize,
+        exploration_rate: (avgExplorationRate * 100).toFixed(1) + '%',
+        avg_partitions: avgNetworkPartitions.toFixed(1),
+        max_partitions: maxNetworkPartitions,
+        connectivity: (avgConnectivity * 100).toFixed(1) + '%'
+    };
+
+    // Display the aggregated stats
+    displayStoredAggregatedStats();
+}
+
+function displayAggregatedStatsFromSummary(summary) {
+    if (!summary || summary.length === 0) return;
+
+    // Aggregate stats across all policies
+    let totalSteps = 0;
+    let successCount = 0;
+    let totalRuns = 0;
+    let totalDistance = 0;
+    let totalIdleSteps = 0;
+    let totalBacktracking = 0;
+    let totalFrontierSize = 0;
+    let maxFrontierSize = 0;
+    let totalExplorationRate = 0;
+    let totalNetworkPartitions = 0;
+    let maxNetworkPartitions = 0;
+    let totalConnectivity = 0;
+    let totalTargetsFound = 0;
+
+    summary.forEach(item => {
+        item.runs.forEach(run => {
+            totalRuns++;
+            totalSteps += run.steps || 0;
+            if (run.success) successCount++;
+            totalDistance += run.total_distance_traveled || 0;
+            totalIdleSteps += run.total_idle_steps || 0;
+            totalBacktracking += run.total_backtracking || 0;
+            totalFrontierSize += run.avg_frontier_size || 0;
+            maxFrontierSize = Math.max(maxFrontierSize, run.max_frontier_size || 0);
+            totalExplorationRate += run.avg_exploration_rate || 0;
+            totalNetworkPartitions += run.avg_network_partitions || 0;
+            maxNetworkPartitions = Math.max(maxNetworkPartitions, run.max_network_partitions || 0);
+            totalConnectivity += run.communication_connectivity || 0;
+            totalTargetsFound += run.targets_found || 0;
+        });
+    });
+
+    if (totalRuns === 0) return;
+
+    const avgSteps = totalSteps / totalRuns;
+    const avgDistance = totalDistance / totalRuns;
+    const avgIdleSteps = totalIdleSteps / totalRuns;
+    const avgBacktracking = totalBacktracking / totalRuns;
+    const avgFrontierSize = totalFrontierSize / totalRuns;
+    const avgExplorationRate = totalExplorationRate / totalRuns;
+    const avgNetworkPartitions = totalNetworkPartitions / totalRuns;
+    const avgConnectivity = totalConnectivity / totalRuns;
+
+    // Store aggregated data for later display
+    aggregatedStatsData = {
+        steps: avgSteps.toFixed(0),
+        targets: totalTargetsFound,
+        success: ((successCount / totalRuns) * 100).toFixed(1) + '%',
+        distance: avgDistance.toFixed(1),
+        avg_distance: (avgDistance / (summary[0].runs[0]?.num_drones || 1)).toFixed(1),
+        idle_steps: avgIdleSteps.toFixed(0),
+        avg_idle: (avgIdleSteps / (summary[0].runs[0]?.num_drones || 1)).toFixed(1),
+        backtracking: avgBacktracking.toFixed(0),
+        avg_backtrack: (avgBacktracking / (summary[0].runs[0]?.num_drones || 1)).toFixed(1),
+        avg_frontier: avgFrontierSize.toFixed(1),
+        max_frontier: maxFrontierSize,
+        exploration_rate: (avgExplorationRate * 100).toFixed(1) + '%',
+        avg_partitions: avgNetworkPartitions.toFixed(1),
+        max_partitions: maxNetworkPartitions,
+        connectivity: (avgConnectivity * 100).toFixed(1) + '%'
+    };
+
+    // Display the aggregated stats
+    displayStoredAggregatedStats();
+}
+
+function displayStoredAggregatedStats() {
+    if (!aggregatedStatsData) {
+        console.log("No aggregated stats data available");
+        return;
+    }
+
+    console.log("Displaying aggregated stats:", aggregatedStatsData);
+
+    // Update the DOM elements
+    const stepsVal = document.getElementById('steps-val');
+    const targetsVal = document.getElementById('targets-val');
+    const successVal = document.getElementById('success-val');
+
+    if (stepsVal) stepsVal.textContent = aggregatedStatsData.steps;
+    if (targetsVal) targetsVal.textContent = aggregatedStatsData.targets;
+    if (successVal) successVal.textContent = aggregatedStatsData.success;
+
+    // Update new metrics
+    const distanceVal = document.getElementById('distance-val');
+    const avgDistanceVal = document.getElementById('avg-distance-val');
+    const idleStepsVal = document.getElementById('idle-steps-val');
+    const avgIdleVal = document.getElementById('avg-idle-val');
+    const backtrackingVal = document.getElementById('backtracking-val');
+    const avgBacktrackVal = document.getElementById('avg-backtrack-val');
+    const avgFrontierVal = document.getElementById('avg-frontier-val');
+    const maxFrontierVal = document.getElementById('max-frontier-val');
+    const explorationRateVal = document.getElementById('exploration-rate-val');
+    const avgPartitionsVal = document.getElementById('avg-partitions-val');
+    const maxPartitionsVal = document.getElementById('max-partitions-val');
+    const connectivityVal = document.getElementById('connectivity-val');
+
+    if (distanceVal) distanceVal.textContent = aggregatedStatsData.distance;
+    if (avgDistanceVal) avgDistanceVal.textContent = aggregatedStatsData.avg_distance;
+    if (idleStepsVal) idleStepsVal.textContent = aggregatedStatsData.idle_steps;
+    if (avgIdleVal) avgIdleVal.textContent = aggregatedStatsData.avg_idle;
+    if (backtrackingVal) backtrackingVal.textContent = aggregatedStatsData.backtracking;
+    if (avgBacktrackVal) avgBacktrackVal.textContent = aggregatedStatsData.avg_backtrack;
+    if (avgFrontierVal) avgFrontierVal.textContent = aggregatedStatsData.avg_frontier;
+    if (maxFrontierVal) maxFrontierVal.textContent = aggregatedStatsData.max_frontier;
+    if (explorationRateVal) explorationRateVal.textContent = aggregatedStatsData.exploration_rate;
+    if (avgPartitionsVal) avgPartitionsVal.textContent = aggregatedStatsData.avg_partitions;
+    if (maxPartitionsVal) maxPartitionsVal.textContent = aggregatedStatsData.max_partitions;
+    if (connectivityVal) connectivityVal.textContent = aggregatedStatsData.connectivity;
 }
 
 function setupCanvas(w, h) {
+    const dpr = window.devicePixelRatio || 1;
     const pxW = w * CONFIG.cellSize;
     const pxH = h * CONFIG.cellSize;
 
-    canvasTruth.width = pxW;
-    canvasTruth.height = pxH;
-    canvasBelief.width = pxW;
-    canvasBelief.height = pxH;
+    // Set internal resolution (sharpness)
+    canvasTruth.width = pxW * dpr;
+    canvasTruth.height = pxH * dpr;
+    canvasBelief.width = pxW * dpr;
+    canvasBelief.height = pxH * dpr;
+
+    // Reset styles to allow CSS to handle responsive sizing
+    // We only set max-width/height to natural size if we want to limit it,
+    // but here we let flexbox handle it.
+    canvasTruth.style.width = '';
+    canvasTruth.style.height = '';
+    canvasBelief.style.width = '';
+    canvasBelief.style.height = '';
+
+    // Normalize coordinate system
+    ctxTruth.scale(dpr, dpr);
+    ctxBelief.scale(dpr, dpr);
+
+    // Ensure pixelated rendering for crisp grid
+    ctxTruth.imageSmoothingEnabled = false;
+    ctxBelief.imageSmoothingEnabled = false;
 }
+
+// Sidebar Toggling
+window.toggleSidebar = function (side) {
+    const sidebar = document.getElementById(side === 'left' ? 'sidebar' : 'right-sidebar');
+    const toggleBtn = document.getElementById(side === 'left' ? 'toggle-left-btn' : 'toggle-right-btn');
+
+    sidebar.classList.toggle('collapsed');
+
+    // Show/Hide the collapsed-state trigger buttons
+    if (sidebar.classList.contains('collapsed')) {
+        toggleBtn.style.display = 'flex';
+    } else {
+        toggleBtn.style.display = 'none';
+    }
+
+    // Trigger resize after transition to ensure charts/canvas update if needed
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+    }, 350);
+};
+
+// View Switching
+window.switchView = function (view) {
+    const vizPanel = document.getElementById('viz-panel');
+    const wrapperTruth = document.getElementById('wrapper-truth');
+    const wrapperBelief = document.getElementById('wrapper-belief');
+    const tabs = document.querySelectorAll('.view-tab');
+
+    // Update Tabs
+    tabs.forEach(tab => {
+        if (tab.textContent.toLowerCase().includes(view.replace('split', 'split_view'))) {
+            tab.classList.add('active');
+        } else { // Handle slight mismatch in text vs id
+            if ((view === 'truth' && tab.textContent.includes('TRUTH')) ||
+                (view === 'belief' && tab.textContent.includes('BELIEF')) ||
+                (view === 'split' && tab.textContent.includes('SPLIT'))) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        }
+    });
+
+    // Update Panel Mode
+    vizPanel.classList.remove('single-view', 'split-view');
+
+    if (view === 'split') {
+        vizPanel.classList.add('split-view');
+        wrapperTruth.style.display = 'flex';
+        wrapperBelief.style.display = 'flex';
+    } else {
+        vizPanel.classList.add('single-view');
+        if (view === 'truth') {
+            wrapperTruth.style.display = 'flex';
+            wrapperBelief.style.display = 'none';
+        } else {
+            wrapperTruth.style.display = 'none';
+            wrapperBelief.style.display = 'flex';
+        }
+    }
+};
 
 function renderFrame() {
     if (!simulationData) return;
@@ -927,8 +1411,11 @@ function renderGroundTruth(state, map) {
         }
     }
 
+    // Render targets from current state (enables visualization of moving targets)
+    // Fall back to map.targets for backward compatibility with old simulation data
+    const currentTargets = state.targets || map.targets;
     ctxTruth.fillStyle = CONFIG.colors.target;
-    for (const [tx, ty] of map.targets) {
+    for (const [tx, ty] of currentTargets) {
         ctxTruth.beginPath();
         ctxTruth.arc(
             tx * CONFIG.cellSize + CONFIG.cellSize / 2,
@@ -938,10 +1425,24 @@ function renderGroundTruth(state, map) {
         ctxTruth.fill();
     }
 
+    // Draw Base Station
+    const startX = map.start_pos ? map.start_pos[0] : 0;
+    const startY = map.start_pos ? map.start_pos[1] : 0;
+    ctxTruth.strokeStyle = CONFIG.colors.baseStation;
+    ctxTruth.lineWidth = 3;
+    ctxTruth.strokeRect(startX * CONFIG.cellSize + 2, startY * CONFIG.cellSize + 2, CONFIG.cellSize - 4, CONFIG.cellSize - 4);
+
+    // Label Base
+    ctxTruth.fillStyle = CONFIG.colors.baseStation;
+    ctxTruth.font = `${CONFIG.cellSize / 2}px monospace`;
+    ctxTruth.textAlign = 'center';
+    ctxTruth.textBaseline = 'middle';
+    ctxTruth.fillText('B', startX * CONFIG.cellSize + CONFIG.cellSize / 2, startY * CONFIG.cellSize + CONFIG.cellSize / 2);
+
     // Draw all drones with distinct colors
     if (state.positions && state.positions.length > 0) {
         state.positions.forEach((pos, index) => {
-            drawAgent(ctxTruth, pos.x, pos.y, index);
+            drawAgent(ctxTruth, pos.x, pos.y, index, pos.battery);
         });
     } else {
         // Fallback for backward compatibility
@@ -983,19 +1484,102 @@ function renderBeliefMap(state, map) {
         ctxBelief.fill();
     }
 
+    // Draw Base Station (Belief)
+    const startX = map.start_pos ? map.start_pos[0] : 0;
+    const startY = map.start_pos ? map.start_pos[1] : 0;
+    ctxBelief.strokeStyle = CONFIG.colors.baseStation;
+    ctxBelief.lineWidth = 3;
+    ctxBelief.strokeRect(startX * CONFIG.cellSize + 2, startY * CONFIG.cellSize + 2, CONFIG.cellSize - 4, CONFIG.cellSize - 4);
+
+    // Label Base
+    ctxBelief.fillStyle = CONFIG.colors.baseStation;
+    ctxBelief.font = `${CONFIG.cellSize / 2}px monospace`;
+    ctxBelief.textAlign = 'center';
+    ctxBelief.textBaseline = 'middle';
+    ctxBelief.fillText('B', startX * CONFIG.cellSize + CONFIG.cellSize / 2, startY * CONFIG.cellSize + CONFIG.cellSize / 2);
+
     // Draw all drones with distinct colors
     if (state.positions && state.positions.length > 0) {
         state.positions.forEach((pos, index) => {
-            drawAgent(ctxBelief, pos.x, pos.y, index);
+            drawAgent(ctxBelief, pos.x, pos.y, index, pos.battery);
         });
     } else {
         // Fallback for backward compatibility
         drawAgent(ctxBelief, state.x, state.y, 0);
     }
+    // Draw HUD -> Use HTML Panel
+    if (typeof updateBatteryPanel === 'function') {
+        updateBatteryPanel(state);
+    }
+
     renderGrid(ctxBelief, w, h);
 }
 
-function drawAgent(ctx, x, y, droneIndex = 0) {
+function updateBatteryPanel(state) {
+    const panel = document.getElementById('battery-panel');
+    if (!state.positions || state.positions.length === 0) {
+        panel.innerHTML = '';
+        return;
+    }
+
+    // Sync number of cards with number of drones
+    const drones = state.positions;
+    let cards = panel.getElementsByClassName('battery-card');
+
+    // Simple sync: if counts mismatch, just clear and rebuild.
+    // For small number of drones this is fine.
+    if (cards.length !== drones.length) {
+        panel.innerHTML = '';
+        drones.forEach((_, i) => {
+            const card = document.createElement('div');
+            card.className = 'battery-card';
+            card.innerHTML = `
+                <div class="bat-header">
+                    <span>DRONE ${i + 1}</span>
+                    <span class="bat-pct">100%</span>
+                </div>
+                <div class="bat-bar-container">
+                    <div class="bat-fill high"></div>
+                </div>
+            `;
+            panel.appendChild(card);
+        });
+        cards = panel.getElementsByClassName('battery-card');
+    }
+
+    // Update each card
+    drones.forEach((pos, i) => {
+        const battery = pos.battery || 0;
+        const maxBat = pos.max_battery || 500;
+        const pct = Math.max(0, Math.min(1, battery / maxBat));
+        const pctInt = Math.round(pct * 100);
+
+        const card = cards[i];
+        if (!card) return;
+
+        const pctText = card.querySelector('.bat-pct');
+        const fill = card.querySelector('.bat-fill');
+
+        pctText.textContent = `${pctInt}%`;
+        fill.style.width = `${pctInt}%`;
+
+        // Update color class
+        fill.className = 'bat-fill'; // reset
+        if (pct > 0.5) fill.classList.add('high');
+        else if (pct > 0.2) fill.classList.add('med');
+        else fill.classList.add('low');
+
+        if (pos.is_dead) {
+            pctText.textContent = "DEAD";
+            fill.style.width = '0%';
+            card.style.opacity = '0.5';
+        } else {
+            card.style.opacity = '1';
+        }
+    });
+}
+
+function drawAgent(ctx, x, y, droneIndex = 0, battery = 1000) {
     // Use distinct color for each drone
     const color = CONFIG.droneColors[droneIndex % CONFIG.droneColors.length];
     ctx.fillStyle = color;

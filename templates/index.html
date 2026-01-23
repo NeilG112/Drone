@@ -13,7 +13,10 @@
 
 <body>
     <div id="sidebar">
-        <h1>// AUTONOMOUS_SEARCH</h1>
+        <div class="sidebar-header">
+            <h1>// AUTONOMOUS_SEARCH</h1>
+            <button class="icon-btn" onclick="toggleSidebar('left')">«</button>
+        </div>
 
         <!-- Tabs -->
         <div class="tabs">
@@ -96,17 +99,37 @@
     </div>
 
     <div id="main-content">
+        <!-- Battery Status Panel -->
+        <div id="battery-panel">
+            <!-- Populated dynamically via JS -->
+        </div>
+
         <!-- Top Visualization Panel -->
-        <div id="viz-panel">
-            <div class="canvas-wrapper">
-                <div class="canvas-title">GROUND_TRUTH</div>
+        <!-- Top Visualization Panel -->
+        <div id="viz-header">
+            <button id="toggle-left-btn" class="icon-btn collapsed-trigger" onclick="toggleSidebar('left')"
+                style="display: none;">»</button>
+
+            <div class="viz-tabs">
+                <button class="view-tab active" onclick="switchView('truth')">GROUND_TRUTH</button>
+                <button class="view-tab" onclick="switchView('belief')">AGENT_BELIEF</button>
+                <button class="view-tab" onclick="switchView('split')">SPLIT_VIEW</button>
+            </div>
+
+            <button id="toggle-right-btn" class="icon-btn collapsed-trigger" onclick="toggleSidebar('right')"
+                style="display: none;">«</button>
+        </div>
+
+        <div id="viz-panel" class="single-view">
+            <div class="canvas-wrapper" id="wrapper-truth">
+                <!-- <div class="canvas-title">GROUND_TRUTH</div> Removed title in favor of tabs -->
                 <div class="canvas-border">
                     <canvas id="ground-truth" width="400" height="400"></canvas>
                 </div>
             </div>
 
-            <div class="canvas-wrapper">
-                <div class="canvas-title">AGENT_BELIEF_STATE</div>
+            <div class="canvas-wrapper" id="wrapper-belief" style="display: none;">
+                <!-- <div class="canvas-title">AGENT_BELIEF_STATE</div> -->
                 <div class="canvas-border">
                     <canvas id="agent-belief" width="400" height="400"></canvas>
                 </div>
@@ -145,6 +168,54 @@
                     <label>SUCCESS</label>
                     <div id="success-val" class="stat-val">--</div>
                 </div>
+                <div class="stat-box">
+                    <label>DISTANCE</label>
+                    <div id="distance-val" class="stat-val">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <label>AVG DIST/AGENT</label>
+                    <div id="avg-distance-val" class="stat-val">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <label>IDLE STEPS</label>
+                    <div id="idle-steps-val" class="stat-val">0</div>
+                </div>
+                <div class="stat-box">
+                    <label>AVG IDLE/AGENT</label>
+                    <div id="avg-idle-val" class="stat-val">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <label>BACKTRACKING</label>
+                    <div id="backtracking-val" class="stat-val">0</div>
+                </div>
+                <div class="stat-box">
+                    <label>AVG BACKTRACK/AGENT</label>
+                    <div id="avg-backtrack-val" class="stat-val">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <label>AVG FRONTIER</label>
+                    <div id="avg-frontier-val" class="stat-val">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <label>MAX FRONTIER</label>
+                    <div id="max-frontier-val" class="stat-val">0</div>
+                </div>
+                <div class="stat-box">
+                    <label>EXPLORATION RATE</label>
+                    <div id="exploration-rate-val" class="stat-val">0.0%</div>
+                </div>
+                <div class="stat-box">
+                    <label>AVG PARTITIONS</label>
+                    <div id="avg-partitions-val" class="stat-val">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <label>MAX PARTITIONS</label>
+                    <div id="max-partitions-val" class="stat-val">0</div>
+                </div>
+                <div class="stat-box">
+                    <label>CONNECTIVITY</label>
+                    <div id="connectivity-val" class="stat-val">0.0%</div>
+                </div>
             </div>
 
             <!-- Charts Container (Hidden by default, shown for Compare/History) -->
@@ -168,6 +239,24 @@
                     <div class="chart-box">
                         <canvas id="collisionsChart"></canvas>
                     </div>
+                    <div class="chart-box">
+                        <canvas id="distanceChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="idleStepsChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="backtrackingChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="frontierChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="explorationChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="connectivityChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -179,6 +268,7 @@
             <div id="list-title"
                 style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase;">
                 <span>SYSTEM_LOGS</span>
+                <button class="icon-btn" onclick="toggleSidebar('right')">»</button>
             </div>
 
             <!-- Filter Input (only visible in History mode) -->

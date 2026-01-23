@@ -75,10 +75,10 @@ def run_simulation():
         
         return jsonify({
             'id': sim_id,
-            'config': result['config'],
-            'stats': result['stats'],
-            'history': result['history'],
-            'map': result['map']
+            'config': _convert_numpy_types(result['config']),
+            'stats': _convert_numpy_types(result['stats']),
+            'history': _convert_numpy_types(result['history']),
+            'map': _convert_numpy_types(result['map'])
         })
     except Exception as e:
         import traceback
@@ -148,7 +148,24 @@ def _run_benchmark_background(job_id, width, height, policy_name, num_runs, map_
                 'avg_info_gain': stats.get('avg_information_gain', 0),
                 'turn_rate': stats.get('turn_rate', 0),
                 'collision_rate': stats.get('collision_rate', 0),
-                'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0)
+                'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0),
+                'first_target_step': stats.get('first_target_step', 0),
+                'avg_time_to_target': stats.get('avg_time_to_target', 0),
+                'total_energy_used': stats.get('total_energy_used', 0),
+                'energy_per_target': stats.get('energy_per_target', 0),
+                # NEW: Additional metrics
+                'total_distance_traveled': stats.get('total_distance_traveled', 0),
+                'avg_distance_per_agent': stats.get('avg_distance_per_agent', 0),
+                'total_idle_steps': stats.get('total_idle_steps', 0),
+                'avg_idle_steps_per_agent': stats.get('avg_idle_steps_per_agent', 0),
+                'total_backtracking': stats.get('total_backtracking', 0),
+                'avg_backtracking_per_agent': stats.get('avg_backtracking_per_agent', 0),
+                'avg_frontier_size': stats.get('avg_frontier_size', 0),
+                'max_frontier_size': stats.get('max_frontier_size', 0),
+                'avg_exploration_rate': stats.get('avg_exploration_rate', 0),
+                'avg_network_partitions': stats.get('avg_network_partitions', 0),
+                'max_network_partitions': stats.get('max_network_partitions', 0),
+                'communication_connectivity': stats.get('communication_connectivity', 0)
             })
             
             # Update Progress
@@ -259,7 +276,24 @@ def _run_compare_background(job_id, width, height, num_runs, policies, map_type,
                     'avg_info_gain': stats.get('avg_information_gain', 0),
                     'turn_rate': stats.get('turn_rate', 0),
                     'collision_rate': stats.get('collision_rate', 0),
-                    'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0)
+                    'max_steps_without_new_info': stats.get('max_steps_without_new_info', 0),
+                    'first_target_step': stats.get('first_target_step', 0),
+                    'avg_time_to_target': stats.get('avg_time_to_target', 0),
+                    'total_energy_used': stats.get('total_energy_used', 0),
+                    'energy_per_target': stats.get('energy_per_target', 0),
+                    # NEW: Additional metrics
+                    'total_distance_traveled': stats.get('total_distance_traveled', 0),
+                    'avg_distance_per_agent': stats.get('avg_distance_per_agent', 0),
+                    'total_idle_steps': stats.get('total_idle_steps', 0),
+                    'avg_idle_steps_per_agent': stats.get('avg_idle_steps_per_agent', 0),
+                    'total_backtracking': stats.get('total_backtracking', 0),
+                    'avg_backtracking_per_agent': stats.get('avg_backtracking_per_agent', 0),
+                    'avg_frontier_size': stats.get('avg_frontier_size', 0),
+                    'max_frontier_size': stats.get('max_frontier_size', 0),
+                    'avg_exploration_rate': stats.get('avg_exploration_rate', 0),
+                    'avg_network_partitions': stats.get('avg_network_partitions', 0),
+                    'max_network_partitions': stats.get('max_network_partitions', 0),
+                    'communication_connectivity': stats.get('communication_connectivity', 0)
                 }
                 
                 # Aggregate stats
@@ -330,7 +364,7 @@ def get_job_status(job_id):
     job = JOBS.get(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
-    return jsonify(job)
+    return jsonify(_convert_numpy_types(job))
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
@@ -430,7 +464,8 @@ def _write_csv_summary(folder_name, runs):
         'id', 'policy', 'seed', 'success', 'steps', 'coverage', 'density', 
         'unique_visited', 'targets_found', 'efficiency', 'turns', 'collisions',
         'revisits', 'max_cell_visits', 'avg_visits_per_cell', 'avg_info_gain',
-        'turn_rate', 'collision_rate', 'max_steps_without_new_info'
+        'turn_rate', 'collision_rate', 'max_steps_without_new_info',
+        'first_target_step', 'avg_time_to_target', 'total_energy_used', 'energy_per_target'
     ]
     
     try:
@@ -457,10 +492,10 @@ def get_simulation(sim_id):
                 result = json.load(f)
             return jsonify({
                 'id': sim_id,
-                'config': result['config'],
-                'stats': result['stats'],
-                'history': result['history'],
-                'map': result['map']
+                'config': _convert_numpy_types(result['config']),
+                'stats': _convert_numpy_types(result['stats']),
+                'history': _convert_numpy_types(result['history']),
+                'map': _convert_numpy_types(result['map'])
             })
         except Exception as e:
              return jsonify({'error': f"Failed to load file: {str(e)}"}), 500
@@ -473,7 +508,37 @@ def _save_run(sim_id, result, folder_name):
     
     file_path = os.path.join(folder_path, f"{sim_id}.json")
     with open(file_path, 'w') as f:
-        json.dump(result, f)
+        # Convert numpy types to Python types for JSON serialization
+        json.dump(_convert_numpy_types(result), f)
+
+def _convert_numpy_types(obj):
+    """Recursively convert numpy types to Python types for JSON serialization."""
+    if isinstance(obj, dict):
+        return {key: _convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(_convert_numpy_types(item) for item in obj)
+    else:
+        # Handle numpy types first
+        try:
+            import numpy as np
+            if isinstance(obj, (np.integer, np.int64, np.int32, np.int16, np.int8)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32, np.float16)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+        except ImportError:
+            pass
+        
+        # Then check for objects with item method
+        if hasattr(obj, 'item'):  # numpy scalar
+            return obj.item()
+        elif hasattr(obj, 'tolist'):  # numpy array
+            return obj.tolist()
+        
+        return obj
 
 def _run_single_sim(width, height, policy_name, seed, map_type='floorplan', complexity=0.67, room_size=15, num_rooms=10, num_drones=1, num_targets=1):
     # Initialize simulation components
