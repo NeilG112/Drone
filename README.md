@@ -1,5 +1,15 @@
 # Drone Navigation Simulation
 
+## Multi-Drone & Swarm Update (2026)
+
+The simulation now supports multi-drone coordination and multi-target search:
+- **Scalable Swarm**: Simulate 1-10 drones with shared belief maps and collaborative search.
+- **Multi-Target Support**: Configure 1-20 targets per map.
+- **Swarm Policy**: Drones split up and explore frontiers closest to them, preventing clumping.
+- **API & UI**: Configure number of drones/targets, visualize drones with unique colors and IDs.
+
+See [MULTI_DRONE_UPDATE.md](MULTI_DRONE_UPDATE.md) for technical details.
+
 A Python-based autonomous drone navigation simulation framework that benchmarks and compares different exploration policies in 2D grid environments with obstacles and targets.
 
 ## Overview
@@ -7,92 +17,79 @@ A Python-based autonomous drone navigation simulation framework that benchmarks 
 This project simulates a drone agent navigating through unknown environments to discover all targets while avoiding obstacles. The drone has limited sensor range and must build a belief map of its surroundings as it explores. The framework supports multiple navigation policies and provides comprehensive performance metrics.
 
 ## Features
-
-- **Multiple Navigation Policies**:
-  - Random Walk: Random exploration
-  - Wall Following: Systematic wall-hugging navigation
-  - Frontier Exploration: Advanced frontier-based path planning
-  
-- **Dynamic Environment Generation**:
-  - Random obstacle placement
-  - Room-based structured layouts
-  - Configurable map dimensions, complexity, room size, and number of rooms
-
-- **Comprehensive Metrics**:
-  - Success rate and completion steps
-  - Map coverage percentage
-  - Search efficiency (unique cells vs. total steps)
-  - Collision count and turn count
-  - Target discovery rate
-
-- **Web-Based Visualization**:
-  - Interactive UI for running simulations
-  - Real-time visualization of drone movement
-  - Heatmap visualization of explored areas
-  - Progress tracking for batch runs
-
-- **Benchmarking & Comparison**:
-  - Single simulation runs
+* Multiple Navigation Policies: Random Walk, Wall Following, Frontier Exploration, Swarm Coordination (multi-drone)
+* Dynamic Environment Generation: Room-based layouts, random obstacles, configurable map size/complexity/rooms/targets
+* Multi-Drone Support: Swarm size (1-10), shared belief map, collaborative search, decentralized frontier assignment
+* Multi-Target Support: 1-20 targets, distributed search
+* Web-Based Visualization: Real-time UI, unique drone colors/IDs, progress tracking
+* Benchmarking & Comparison: Single/multi-policy runs, CSV export, historical replay
+* Comprehensive Metrics: Success rate, steps, coverage, efficiency, collisions, turns, targets found
   - Policy benchmarking (multiple runs of one policy)
   - Multi-policy comparison (same maps, different policies)
   - CSV export of results
   - Historical run storage and replay
 
+Please see [MULTI_DRONE_UPDATE.md](MULTI_DRONE_UPDATE.md) for details on the new Multi-Drone and Swarm features.
+
 ## Project Structure
 
 ```
-DroneNavigation/
+AlgorithmTesting/
 ├── backend/
-│   ├── app.py                      # Flask API server
+│   ├── app.py                # Flask API server
 │   ├── simulation/
-│   │   ├── agent.py               # Drone agent with sensing and movement
-│   │   ├── engine.py              # Simulation engine and metrics
-│   │   ├── world.py               # Grid map generation and management
-│   │   └── policies/              # Navigation policy implementations
-│   │       ├── base.py
-│   │       ├── random_walk.py
-│   │       ├── wall_follow.py
-│   │       └── frontier.py
+│   │   ├── agent.py          # Drone agent (multi-drone support)
+│   │   ├── engine.py         # Simulation engine (swarm logic)
+│   │   ├── world.py          # Map generation (multi-target)
+│   │   ├── policies/         # Navigation policies (random, wall, frontier, swarm)
+│   │   └── utils/            # Utility functions
 │   ├── templates/
-│   │   └── index.html             # Web UI
-│   ├── static/                    # Static assets
-│   └── data/                      # Simulation results storage
+│   │   └── index.html        # Web UI
+│   ├── static/               # CSS/JS assets
+│   └── data/                 # Simulation results
+├── tests/                    # Test scripts
+├── MULTI_DRONE_UPDATE.md     # Details on multi-drone features
 ```
 
 ## Installation
 
 ### Prerequisites
-
-- Python 3.7+
-- pip package manager
+* Python 3.7+
+* pip
 
 ### Setup
-
 1. Clone the repository:
-```bash
-git clone https://github.com/NeilG112/Drone.git
-cd DroneNavigation
-```
-
-2. Install dependencies:
-```bash
-pip install flask numpy
-```
+  ```bash
+  git clone https://github.com/NeilG112/Drone.git
+  cd AlgorithmTesting
+  ```
+2. (Optional) Create a virtual environment:
+  ```bash
+  python3 -m venv venv
+  source venv/bin/activate
+  ```
+3. Install dependencies:
+  ```bash
+  pip install flask numpy
+  ```
 
 ## Usage
 
 ### Starting the Server
-
 Navigate to the backend directory and start the Flask server:
-
 ```bash
 cd backend
 python app.py
 ```
-
 The server will start on `http://localhost:5000` by default.
 
 ### Running Simulations
+
+#### Multi-Drone Example
+1. Open your browser to `http://localhost:5000`
+2. Set **Number of Drones** (1-10) and **Number of Targets** (1-20)
+3. Select **Policy**: `SWARM` (or others)
+4. Click "Run Simulation" and watch each drone (unique color/ID) explore collaboratively.
 
 #### Single Simulation
 
@@ -130,9 +127,9 @@ Compare multiple navigation policies on identical map seeds:
 
 - `GET /` - Web interface
 - `GET /api/policies` - List available policies
-- `POST /api/simulate` - Run single simulation
-- `POST /api/benchmark` - Start benchmark job
-- `POST /api/compare` - Start comparison job
+- `POST /api/simulate` - Run single simulation (`num_drones`, `num_targets` supported)
+- `POST /api/benchmark` - Start benchmark job (`num_drones`, `num_targets` supported)
+- `POST /api/compare` - Start comparison job (`num_drones`, `num_targets` supported)
 - `GET /api/job/<job_id>` - Check job status and progress
 - `GET /api/history` - List all saved simulation batches
 - `GET /api/history/<folder_name>` - Get runs from specific batch
@@ -142,40 +139,34 @@ Compare multiple navigation policies on identical map seeds:
 ## Configuration
 
 ### Map Generation Parameters
-
-- **Width/Height**: Grid dimensions (default: 20×20)
-- **Map Type**: 
-  - `random`: Random obstacle placement
-  - `rooms`: Room-based structure with corridors
-- **Complexity**: Obstacle density (0.0-1.0, default: 0.2)
-- **Room Size**: Average room dimensions for room-based maps
-- **Number of Rooms**: Target room count (may vary based on constraints)
+- **Width/Height**: Grid dimensions (default: 100×100)
+- **Map Type**: Room-based structure (default), random obstacles
+- **Complexity**: Obstacle density (default: 0.67)
+- **Room Size**: Average room size (default: 15)
+- **Number of Rooms**: Default 10
+- **Number of Targets**: 1-20
 
 ### Agent Configuration
 
-The agent has the following characteristics (configurable in `agent.py`):
-
-- **Sensor Range**: 3 cells in all directions
-- **Line-of-Sight Sensing**: Uses Bresenham's algorithm
-- **Max Steps**: 500 steps per simulation (configurable in `engine.py`)
+Agents (drones) have:
+- **Sensor Range**: 3 cells
+- **Line-of-Sight Sensing**: Bresenham's algorithm
+- **Max Steps**: 500 (configurable)
+- **Shared Belief Map**: All drones instantly share discoveries
 
 ### Adding New Policies
 
 1. Create a new file in `backend/simulation/policies/`
 2. Inherit from the base policy class
-3. Implement the `select_action(agent)` method
-4. Register the policy in `policies/__init__.py`
-
+3. Implement `select_action(agent)`
+4. Register in `policies/__init__.py`
 Example:
-
 ```python
 from .base import Policy
-
 class MyPolicy(Policy):
-    def select_action(self, agent):
-        # Your navigation logic here
-        # Return (dx, dy) where dx, dy ∈ {-1, 0, 1}
-        return dx, dy
+  def select_action(self, agent):
+    # Navigation logic
+    return dx, dy
 ```
 
 ## Performance Metrics
@@ -240,5 +231,4 @@ To contribute to this project:
 1. Create a new policy in the `policies/` directory
 2. Test it thoroughly with various map configurations
 3. Document the algorithm and expected performance characteristics
-
 
