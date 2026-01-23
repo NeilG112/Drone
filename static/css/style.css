@@ -471,8 +471,7 @@ button:disabled,
 #viz-panel.single-view .canvas-wrapper {
     width: 100%;
     height: 100%;
-    max-width: 800px;
-    /* Prevent it from becoming too massive */
+    /* max-width: 800px; */ /* Removed to allow large maps */
     display: flex;
     flex-direction: column;
 }

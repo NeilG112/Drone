@@ -1,5 +1,5 @@
 const CONFIG = {
-    cellSize: 20,
+    cellSize: 6,
     colors: {
         unknown: '#2c2c2c',
         free: '#ffffff',
@@ -1065,12 +1065,13 @@ function reconstructHistory(data) {
 function updateStats() {
     if (!simulationData) return;
 
-    // If we have aggregated stats, display them instead of individual run stats
-    if (aggregatedStatsData && (currentMode === 'benchmark' || currentMode === 'compare')) {
+    // Always show aggregated stats if available (benchmark, compare, history)
+    if (aggregatedStatsData) {
         displayStoredAggregatedStats();
         return;
     }
 
+    // Otherwise show single run stats
     const stats = simulationData.stats;
     stepsVal.textContent = stats.steps;
     targetsVal.textContent = `${stats.targets_found} / ${stats.targets_total}`;
