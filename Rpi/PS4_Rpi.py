@@ -135,16 +135,23 @@ class DroneController:
 
     # ─── Controller ──────────────────────────────────────────────────────
     def init_controller(self):
-        """Try to find and initialize a PS4 controller."""
+        """Try to find and initialize a PS4 / DS4 controller."""
         pygame.joystick.quit()
         pygame.joystick.init()
         count = pygame.joystick.get_count()
+
         if count > 0:
             self.joystick = pygame.joystick.Joystick(0)
             self.joystick.init()
             self.controller_name = self.joystick.get_name()
             self.controller_connected = True
 
+            # One-time diagnostic — shows axis/button layout at init
+            n_axes   = self.joystick.get_numaxes()
+            n_btns   = self.joystick.get_numbuttons()
+            n_hats   = self.joystick.get_numhats()
+            self.log(f"Controller: {self.controller_name}")
+            self.log(f"  Axes={n_axes}  Buttons={n_btns}  Hats={n_hats}")
             return True
         else:
             self.controller_connected = False
@@ -168,7 +175,6 @@ class DroneController:
         except pygame.error:
             self.controller_connected = False
             self.throttle = RC_MIN
-
             return
 
         # ── R2 trigger → Throttle ──
@@ -716,6 +722,10 @@ class DroneController:
     # ─── Main Loop ───────────────────────────────────────────────────────
     def run(self):
         """Main application entry point."""
+        # Allow joystick events even when the window is not focused
+        import os
+        os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
+
         pygame.init()
         pygame.display.set_caption("Drone Controller — PS4")
         screen = pygame.display.set_mode((WIN_W, WIN_H))
