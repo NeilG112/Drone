@@ -52,7 +52,7 @@ SLIDER_TRACK   = (50, 50, 68)
 SLIDER_GROOVE  = (30, 30, 42)
 
 # ─── Window ───────────────────────────────────────────────────────────────────
-WIN_W, WIN_H = 1200, 820
+WIN_W, WIN_H = 1200, 950
 
 # ─── PID Parameter Definitions ────────────────────────────────────────────────
 # Each entry: (display_name, param_name, min_val, max_val, default, step)
@@ -69,13 +69,18 @@ PID_PARAMS = [
     ("Yaw P",   "ATC_RAT_YAW_P", 0.0, 2.0, 0.180, 0.001),
     ("Yaw I",   "ATC_RAT_YAW_I", 0.0, 1.0, 0.018, 0.001),
     ("Yaw D",   "ATC_RAT_YAW_D", 0.0, 0.1, 0.0,   0.0001),
+    # AHRS Trim
+    ("Trim X",  "AHRS_TRIM_X", -0.5, 0.5, 0.0, 0.001),
+    ("Trim Y",  "AHRS_TRIM_Y", -0.5, 0.5, 0.0, 0.001),
+    ("Trim Z",  "AHRS_TRIM_Z", -0.5, 0.5, 0.0, 0.001),
 ]
 
 # Group names and which PID_PARAMS indices belong to each group
 PID_GROUPS = [
-    ("ROLL",  [0, 1, 2], ACCENT_BLUE),
-    ("PITCH", [3, 4, 5], ACCENT_GREEN),
-    ("YAW",   [6, 7, 8], ACCENT_PURPLE),
+    ("ROLL",      [0, 1, 2], ACCENT_BLUE),
+    ("PITCH",     [3, 4, 5], ACCENT_GREEN),
+    ("YAW",       [6, 7, 8], ACCENT_PURPLE),
+    ("AHRS TRIM", [9, 10, 11], ACCENT_CYAN),
 ]
 
 
@@ -209,6 +214,11 @@ class PIDTuner:
         # Parameter cache {param_name: value}
         self.fc_params = {}
         self.params_loaded = False
+        self.params_received = set()  # track which PID params we've received
+        self.params_requested_time = 0  # when we last requested params
+        self.params_retry_count = 0
+        self.PARAMS_RETRY_MAX = 5
+        self.PARAMS_RETRY_INTERVAL = 2.0  # seconds between retries
 
         # UI button rects
         self.btn_connect_rect = pygame.Rect(0, 0, 0, 0)
@@ -257,16 +267,36 @@ class PIDTuner:
             self.connecting = False
 
     def request_params(self):
-        """Request all parameters from FC."""
-        if self.master and self.connected:
+        """Request each PID parameter individually from FC."""
+        if not self.master or not self.connected:
+            return
+        self.params_received.clear()
+        self.params_loaded = False
+        self.params_retry_count = 0
+        self.params_requested_time = time.time()
+        self._send_pid_param_requests()
+
+    def _send_pid_param_requests(self):
+        """Send PARAM_REQUEST_READ for each PID param not yet received."""
+        if not self.master or not self.connected:
+            return
+        pending = [p[1] for p in PID_PARAMS if p[1] not in self.params_received]
+        if not pending:
+            if not self.params_loaded:
+                self.params_loaded = True
+                self.log("✓ All PID parameters loaded from FC")
+            return
+        self.log(f"Requesting {len(pending)} PID parameter(s) from FC...")
+        for param_name in pending:
             try:
-                self.log("Requesting parameters from FC...")
-                self.master.mav.param_request_list_send(
+                self.master.mav.param_request_read_send(
                     self.master.target_system,
-                    self.master.target_component
+                    self.master.target_component,
+                    param_name.encode('utf-8'),
+                    -1  # use param name, not index
                 )
             except Exception as e:
-                self.log(f"Param request failed: {e}")
+                self.log(f"Param request failed for {param_name}: {e}")
 
     def set_param(self, param_name, value):
         """Send a parameter value to the FC."""
@@ -312,6 +342,15 @@ class PIDTuner:
                 self.send_gcs_heartbeat()
                 self.last_heartbeat_time = now
 
+            # Retry requesting PID params that haven't arrived yet
+            if (not self.params_loaded
+                    and self.params_requested_time > 0
+                    and self.params_retry_count < self.PARAMS_RETRY_MAX
+                    and now - self.params_requested_time > self.PARAMS_RETRY_INTERVAL):
+                self.params_retry_count += 1
+                self.params_requested_time = now
+                self._send_pid_param_requests()
+
             try:
                 msg = self.master.recv_match(blocking=False)
             except Exception:
@@ -328,12 +367,20 @@ class PIDTuner:
                 name = msg.param_id.strip('\x00')
                 val = msg.param_value
                 self.fc_params[name] = val
-                # Update matching slider
+                # Update matching slider and mark as received
                 for slider in self.pid_sliders:
                     if slider.param_name == name:
                         slider.value = max(slider.min_val,
                                            min(slider.max_val, val))
-                        self.log(f"← {name} = {val:.4f}")
+                        if name not in self.params_received:
+                            self.params_received.add(name)
+                            self.log(f"← {name} = {val:.4f}")
+                            # Check if all PID params are now loaded
+                            all_pid_names = {p[1] for p in PID_PARAMS}
+                            if all_pid_names.issubset(self.params_received):
+                                if not self.params_loaded:
+                                    self.params_loaded = True
+                                    self.log("✓ All PID parameters loaded from FC")
 
             elif msg_type == "STATUSTEXT":
                 self.log(f"[FC] {msg.text}")
@@ -546,12 +593,20 @@ class PIDTuner:
         # ─── Left Column: PID Sliders ────────────────────────────────
         pid_panel_x = 16
         pid_panel_w = 720
-        pid_panel_h = 520
+        pid_panel_h = 700
         self._draw_panel(screen, pid_panel_x, y_top, pid_panel_w, pid_panel_h,
                          "PID PARAMETERS", fonts)
 
+        # Loading indicator if params not yet loaded
+        if self.connected and not self.params_loaded:
+            dots = "." * (1 + int(time.time() * 2) % 3)
+            loading_txt = font_md.render(
+                f"Loading parameters from FC{dots}", True, ACCENT_YELLOW)
+            screen.blit(loading_txt, (pid_panel_x + 20, y_top + 34))
+
         # Group headers + sliders
-        group_y = y_top + 34
+        group_y = y_top + (58 if self.connected and not self.params_loaded
+                           else 34)
         for group_name, indices, group_color in PID_GROUPS:
             # Group header with accent line
             pygame.draw.rect(screen, group_color,
@@ -567,9 +622,19 @@ class PIDTuner:
                 self.pid_sliders[idx].rect.x = pid_panel_x + 100
                 self.pid_sliders[idx].rect.w = 480
                 self.pid_sliders[idx].draw(screen, fonts)
-                slider_y += 52
 
-            group_y = slider_y + 10
+                # Show "not loaded" indicator per slider
+                if (self.connected and not self.params_loaded
+                        and self.pid_sliders[idx].param_name
+                        not in self.params_received):
+                    wait_txt = font_sm.render("(waiting…)", True, TEXT_DIM)
+                    screen.blit(wait_txt, (
+                        pid_panel_x + 100 + 480 + 80,
+                        slider_y + 18 - 4))
+
+                slider_y += 44
+
+            group_y = slider_y + 6
 
         # ─── Right Column: Throttle + Actions ────────────────────────
         right_x = pid_panel_x + pid_panel_w + 16
@@ -764,9 +829,10 @@ class PIDTuner:
                     elif event.key == pygame.K_k:
                         self.kill_motors()
 
-                # Pass events to sliders
+                # Pass events to sliders (PID sliders blocked until params loaded)
                 for slider in self.pid_sliders:
-                    slider.handle_event(event)
+                    if self.params_loaded or not self.connected:
+                        slider.handle_event(event)
                 self.throttle_slider.handle_event(event)
 
                 # Mouse clicks on buttons
